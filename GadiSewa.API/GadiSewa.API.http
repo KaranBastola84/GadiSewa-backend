@@ -1,0 +1,6 @@
+@GadiSewa.API_HostAddress = http://localhost:5030
+
+GET {{GadiSewa.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
