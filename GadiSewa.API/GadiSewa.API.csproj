@@ -7,10 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.15" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\GadiSewa.Application\GadiSewa.Application.csproj" />
     <ProjectReference Include="..\GadiSewa.Infrastructure\GadiSewa.Infrastructure.csproj" />
   </ItemGroup>
