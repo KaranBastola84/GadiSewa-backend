@@ -54,26 +54,6 @@ public class AuthController : ControllerBase
     }
 
     [Authorize]
-    [HttpGet("me")]
-    public async Task<ActionResult<UserProfileDto>> Me(CancellationToken cancellationToken)
-    {
-        try
-        {
-            var userId = GetCurrentUserId();
-            var profile = await _authService.GetProfileAsync(userId, cancellationToken);
-            return Ok(profile);
-        }
-        catch (UnauthorizedException ex)
-        {
-            return Unauthorized(new { message = ex.Message });
-        }
-        catch (NotFoundException ex)
-        {
-            return NotFound(new { message = ex.Message });
-        }
-    }
-
-    [Authorize]
     [HttpGet("profile")]
     public async Task<ActionResult<UserProfileDto>> Profile(CancellationToken cancellationToken)
     {
@@ -166,6 +146,33 @@ public class AuthController : ControllerBase
         {
             return NotFound(new { message = ex.Message });
         }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("refresh-token")]
+    public async Task<ActionResult<AuthResponseDto>> RefreshToken(
+        [FromBody] RefreshTokenRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _authService.RefreshTokenAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+    }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout(
+        [FromBody] RefreshTokenRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        await _authService.LogoutAsync(request, cancellationToken);
+        return NoContent();
     }
 
     private Guid GetCurrentUserId()

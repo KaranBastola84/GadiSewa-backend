@@ -15,7 +15,9 @@ public sealed class AuthResponseDto
 
     public string Token { get; init; } = string.Empty;
 
-    public static AuthResponseDto FromUser(User user, string token)
+    public string RefreshToken { get; init; } = string.Empty;
+
+    public static AuthResponseDto FromUser(User user, string token, string refreshToken)
     {
         return new AuthResponseDto
         {
@@ -23,7 +25,8 @@ public sealed class AuthResponseDto
             FullName = $"{user.FirstName} {user.LastName}".Trim(),
             Email = user.Email,
             Role = user.Role,
-            Token = token
+            Token = token,
+            RefreshToken = refreshToken
         };
     }
 }

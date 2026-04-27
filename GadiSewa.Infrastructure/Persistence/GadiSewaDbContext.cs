@@ -26,6 +26,7 @@ public sealed class GadiSewaDbContext : DbContext
     public DbSet<PartRequest> PartRequests => Set<PartRequest>();
     public DbSet<CreditPayment> CreditPayments => Set<CreditPayment>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -62,6 +63,19 @@ public sealed class GadiSewaDbContext : DbContext
             .WithMany()
             .HasForeignKey(x => x.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.Property(x => x.TokenHash).HasMaxLength(128);
+            entity.Property(x => x.ReplacedByTokenHash).HasMaxLength(128);
+
+            entity
+                .HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Staff>(entity =>
