@@ -25,6 +25,7 @@ public sealed class GadiSewaDbContext : DbContext
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<PartRequest> PartRequests => Set<PartRequest>();
     public DbSet<CreditPayment> CreditPayments => Set<CreditPayment>();
+    public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
@@ -39,6 +40,7 @@ public sealed class GadiSewaDbContext : DbContext
             entity.Property(x => x.PhoneNumber).HasMaxLength(20);
             entity.Property(x => x.PasswordHash).HasMaxLength(1000);
             entity.Property(x => x.Role).HasConversion<int>();
+            entity.Property(x => x.IsEmailVerified).HasDefaultValue(false);
 
             entity
                 .HasOne(x => x.StaffProfile)
@@ -51,6 +53,18 @@ public sealed class GadiSewaDbContext : DbContext
                 .WithOne(x => x.User)
                 .HasForeignKey<Customer>(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EmailVerificationToken>(entity =>
+        {
+            entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.Property(x => x.TokenHash).HasMaxLength(128);
+
+            entity
+            .HasOne(x => x.User)
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<PasswordResetToken>(entity =>

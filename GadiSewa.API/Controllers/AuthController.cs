@@ -53,6 +53,37 @@ public class AuthController : ControllerBase
         }
     }
 
+    [AllowAnonymous]
+    [HttpPost("verify-email")]
+    public async Task<IActionResult> VerifyEmail(
+        [FromBody] VerifyEmailRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _authService.VerifyEmailAsync(request, cancellationToken);
+            return NoContent();
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("resend-verification")]
+    public async Task<IActionResult> ResendVerification(
+        [FromBody] ResendVerificationRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        await _authService.ResendVerificationEmailAsync(request, cancellationToken);
+        return Ok(new { message = "If the email exists, a verification email has been sent." });
+    }
+
     [Authorize]
     [HttpGet("profile")]
     public async Task<ActionResult<UserProfileDto>> Profile(CancellationToken cancellationToken)

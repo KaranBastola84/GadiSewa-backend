@@ -17,6 +17,13 @@ public sealed class EmailService : IEmailService
         _logger = logger;
     }
 
+    public Task SendEmailVerificationEmailAsync(string email, string fullName, string verificationToken, CancellationToken cancellationToken = default)
+    {
+        var subject = "Verify your GadiSewa email";
+        var body = $"Hello {fullName},\n\nUse this token to verify your email address: {verificationToken}\n\nThis token will expire in 24 hours.\n\nRegards,\nGadiSewa Team";
+        return SendEmailAsync(email, subject, body, cancellationToken);
+    }
+
     public Task SendWelcomeEmailAsync(string email, string fullName, CancellationToken cancellationToken = default)
     {
         var subject = "Welcome to GadiSewa";

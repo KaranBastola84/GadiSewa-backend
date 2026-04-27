@@ -17,7 +17,9 @@ public sealed class AuthResponseDto
 
     public string RefreshToken { get; init; } = string.Empty;
 
-    public static AuthResponseDto FromUser(User user, string token, string refreshToken)
+    public bool RequiresEmailVerification { get; init; }
+
+    public static AuthResponseDto FromUser(User user, string token, string refreshToken, bool requiresEmailVerification = false)
     {
         return new AuthResponseDto
         {
@@ -26,7 +28,8 @@ public sealed class AuthResponseDto
             Email = user.Email,
             Role = user.Role,
             Token = token,
-            RefreshToken = refreshToken
+            RefreshToken = refreshToken,
+            RequiresEmailVerification = requiresEmailVerification
         };
     }
 }

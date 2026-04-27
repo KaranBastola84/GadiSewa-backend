@@ -12,6 +12,7 @@ namespace GadiSewa.Application.Services;
 public sealed class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
+    private readonly IRepository<EmailVerificationToken> _emailVerificationTokenRepository;
     private readonly IRepository<PasswordResetToken> _passwordResetTokenRepository;
     private readonly IRepository<RefreshToken> _refreshTokenRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -21,6 +22,7 @@ public sealed class AuthService : IAuthService
 
     public AuthService(
         IUserRepository userRepository,
+        IRepository<EmailVerificationToken> emailVerificationTokenRepository,
         IRepository<PasswordResetToken> passwordResetTokenRepository,
         IRepository<RefreshToken> refreshTokenRepository,
         IUnitOfWork unitOfWork,
@@ -29,6 +31,7 @@ public sealed class AuthService : IAuthService
         IEmailService emailService)
     {
         _userRepository = userRepository;
+        _emailVerificationTokenRepository = emailVerificationTokenRepository;
         _passwordResetTokenRepository = passwordResetTokenRepository;
         _refreshTokenRepository = refreshTokenRepository;
         _unitOfWork = unitOfWork;
@@ -57,17 +60,17 @@ public sealed class AuthService : IAuthService
             PhoneNumber = request.PhoneNumber.Trim(),
             PasswordHash = _passwordHasherService.HashPassword(request.Password),
             Role = UserRole.Customer,
-            IsActive = true
+            IsActive = true,
+            IsEmailVerified = false
         };
 
         await _userRepository.AddAsync(user, cancellationToken);
+        var verificationToken = await CreateEmailVerificationTokenAsync(user, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await _emailService.SendWelcomeEmailAsync(user.Email, $"{user.FirstName} {user.LastName}".Trim(), cancellationToken);
+        await _emailService.SendEmailVerificationEmailAsync(user.Email, $"{user.FirstName} {user.LastName}".Trim(), verificationToken, cancellationToken);
 
-        var token = _jwtTokenGenerator.GenerateToken(user);
-        var refreshToken = await CreateRefreshTokenAsync(user, cancellationToken);
-        return AuthResponseDto.FromUser(user, token, refreshToken);
+        return AuthResponseDto.FromUser(user, string.Empty, string.Empty, requiresEmailVerification: true);
     }
 
     public async Task<AuthResponseDto> LoginAsync(
@@ -87,6 +90,11 @@ public sealed class AuthService : IAuthService
             throw new UnauthorizedException("User account is not active.");
         }
 
+        if (!user.IsEmailVerified)
+        {
+            throw new UnauthorizedException("Email is not verified. Please verify your email first.");
+        }
+
         user.LastLoginAt = DateTimeOffset.UtcNow;
         user.UpdatedAt = DateTimeOffset.UtcNow;
         _userRepository.Update(user);
@@ -95,6 +103,63 @@ public sealed class AuthService : IAuthService
         var token = _jwtTokenGenerator.GenerateToken(user);
         var refreshToken = await CreateRefreshTokenAsync(user, cancellationToken);
         return AuthResponseDto.FromUser(user, token, refreshToken);
+    }
+
+    public async Task VerifyEmailAsync(VerifyEmailRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var tokenHash = HashToken(request.Token.Trim());
+        var now = DateTimeOffset.UtcNow;
+
+        var verificationTokens = await _emailVerificationTokenRepository.ListAsync(
+            x => x.TokenHash == tokenHash && x.UsedAt == null,
+            cancellationToken);
+
+        var verificationToken = verificationTokens.FirstOrDefault(x => x.ExpiresAt > now);
+        if (verificationToken is null)
+        {
+            throw new UnauthorizedException("Invalid or expired verification token.");
+        }
+
+        var user = await _userRepository.GetByIdAsync(verificationToken.UserId, cancellationToken);
+        if (user is null)
+        {
+            throw new NotFoundException("User not found.");
+        }
+
+        if (!user.IsEmailVerified)
+        {
+            user.IsEmailVerified = true;
+            user.EmailVerifiedAt = now;
+            user.UpdatedAt = now;
+            _userRepository.Update(user);
+        }
+
+        verificationToken.UsedAt = now;
+        _emailVerificationTokenRepository.Update(verificationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _emailService.SendWelcomeEmailAsync(user.Email, $"{user.FirstName} {user.LastName}".Trim(), cancellationToken);
+    }
+
+    public async Task ResendVerificationEmailAsync(ResendVerificationRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var user = await _userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
+        if (user is null || user.IsEmailVerified)
+        {
+            return;
+        }
+
+        var existingTokens = await _emailVerificationTokenRepository.ListAsync(x => x.UserId == user.Id && x.UsedAt == null, cancellationToken);
+        foreach (var existingToken in existingTokens)
+        {
+            _emailVerificationTokenRepository.Remove(existingToken);
+        }
+
+        var verificationToken = await CreateEmailVerificationTokenAsync(user, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _emailService.SendEmailVerificationEmailAsync(user.Email, $"{user.FirstName} {user.LastName}".Trim(), verificationToken, cancellationToken);
     }
 
     public async Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto request, CancellationToken cancellationToken = default)
@@ -266,6 +331,20 @@ public sealed class AuthService : IAuthService
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
         return Convert.ToHexString(bytes);
+    }
+
+    private async Task<string> CreateEmailVerificationTokenAsync(User user, CancellationToken cancellationToken)
+    {
+        var verificationToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
+        var entity = new EmailVerificationToken
+        {
+            UserId = user.Id,
+            TokenHash = HashToken(verificationToken),
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
+        };
+
+        await _emailVerificationTokenRepository.AddAsync(entity, cancellationToken);
+        return verificationToken;
     }
 
     private async Task<string> CreateRefreshTokenAsync(User user, CancellationToken cancellationToken)
