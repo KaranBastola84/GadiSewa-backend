@@ -1,2 +1,32 @@
-bin/
-obj/
+# Build results
+/bin/
+/obj/
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio / VS Code
+.vscode/
+.idea/
+.github
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# dotnet tools
+*.dbmdl
+*.jfm
+
+# Entity Framework Migrations (optional – keep if you want to version DB schema)
+#migrations/
+
+# Secrets
+appsettings.Development.json
