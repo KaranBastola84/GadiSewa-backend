@@ -1,6 +1,7 @@
 using GadiSewa.Application;
 using GadiSewa.Infrastructure;
 using GadiSewa.Infrastructure.Authentication;
+using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -37,7 +38,12 @@ builder.Services
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy => policy.RequireRole(UserRole.Admin.ToString()));
+    options.AddPolicy("StaffOnly", policy => policy.RequireRole(UserRole.Staff.ToString()));
+    options.AddPolicy("CustomerOnly", policy => policy.RequireRole(UserRole.Customer.ToString()));
+});
 
 var app = builder.Build();
 
