@@ -1,4 +1,5 @@
 using GadiSewa.Application.Common.Exceptions;
+using GadiSewa.Application.Common.Responses;
 using GadiSewa.Application.DTOs.Auth;
 using GadiSewa.Application.Interfaces.Persistence;
 using GadiSewa.Application.Interfaces.Services;
@@ -38,27 +39,27 @@ public sealed class AdminUsersController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<UserProfileDto>>> GetUsers(CancellationToken cancellationToken)
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<UserProfileDto>>>> GetUsers(CancellationToken cancellationToken)
     {
         var users = await _userRepository.ListAsync(cancellationToken: cancellationToken);
         var result = users.Select(UserProfileDto.FromUser).ToList();
-        return Ok(result);
+        return Ok(ApiResponse<IReadOnlyList<UserProfileDto>>.Success(result));
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<ActionResult<UserProfileDto>> GetUserById(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<ApiResponse<UserProfileDto>>> GetUserById(Guid id, CancellationToken cancellationToken)
     {
         var user = await _userRepository.GetByIdAsync(id, cancellationToken);
         if (user is null)
         {
-            return NotFound(new { message = "User not found." });
+            return NotFound(ApiResponse<UserProfileDto>.Failure("User not found.", StatusCodes.Status404NotFound));
         }
 
-        return Ok(UserProfileDto.FromUser(user));
+        return Ok(ApiResponse<UserProfileDto>.Success(UserProfileDto.FromUser(user)));
     }
 
     [HttpPost("staff")]
-    public async Task<ActionResult<UserProfileDto>> CreateStaff(
+    public async Task<ActionResult<ApiResponse<UserProfileDto>>> CreateStaff(
         [FromBody] CreateStaffRequestDto request,
         CancellationToken cancellationToken)
     {
@@ -103,11 +104,11 @@ public sealed class AdminUsersController : ControllerBase
 
         await _emailService.SendWelcomeEmailAsync(user.Email, $"{user.FirstName} {user.LastName}".Trim(), cancellationToken);
 
-        return Ok(UserProfileDto.FromUser(user));
+        return Ok(ApiResponse<UserProfileDto>.Success(UserProfileDto.FromUser(user)));
     }
 
     [HttpPut("{id:guid}/status")]
-    public async Task<IActionResult> UpdateStatus(
+    public async Task<ActionResult<ApiResponse<object?>>> UpdateStatus(
         Guid id,
         [FromBody] UpdateUserStatusRequestDto request,
         CancellationToken cancellationToken)
@@ -115,7 +116,7 @@ public sealed class AdminUsersController : ControllerBase
         var user = await _userRepository.GetByIdAsync(id, cancellationToken);
         if (user is null)
         {
-            return NotFound(new { message = "User not found." });
+            return NotFound(ApiResponse<object?>.Failure("User not found.", StatusCodes.Status404NotFound));
         }
 
         user.IsActive = request.IsActive;
@@ -133,6 +134,6 @@ public sealed class AdminUsersController : ControllerBase
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return NoContent();
+        return Ok(ApiResponse<object?>.Success(null));
     }
 }

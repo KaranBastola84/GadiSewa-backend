@@ -1,4 +1,5 @@
 using GadiSewa.Application.Common.Exceptions;
+using GadiSewa.Application.Common.Responses;
 using GadiSewa.Application.DTOs.Auth;
 using GadiSewa.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -21,92 +22,95 @@ public class AuthController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("register")]
-    public async Task<ActionResult<AuthResponseDto>> Register(
+    public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Register(
         [FromBody] RegisterRequestDto request,
         CancellationToken cancellationToken)
     {
         try
         {
             var response = await _authService.RegisterAsync(request, cancellationToken);
-            return Ok(response);
+            return Ok(ApiResponse<AuthResponseDto>.Success(response));
         }
         catch (ConflictException ex)
         {
-            return Conflict(new { message = ex.Message });
+            return Conflict(ApiResponse<AuthResponseDto>.Failure(ex.Message, StatusCodes.Status409Conflict));
         }
     }
 
     [AllowAnonymous]
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponseDto>> Login(
+    public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Login(
         [FromBody] LoginRequestDto request,
         CancellationToken cancellationToken)
     {
         try
         {
             var response = await _authService.LoginAsync(request, cancellationToken);
-            return Ok(response);
+            return Ok(ApiResponse<AuthResponseDto>.Success(response));
         }
         catch (UnauthorizedException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Unauthorized(ApiResponse<AuthResponseDto>.Failure(ex.Message, StatusCodes.Status401Unauthorized));
         }
     }
 
     [AllowAnonymous]
     [HttpPost("verify-email")]
-    public async Task<IActionResult> VerifyEmail(
+    public async Task<ActionResult<ApiResponse<object?>>> VerifyEmail(
         [FromBody] VerifyEmailRequestDto request,
         CancellationToken cancellationToken)
     {
         try
         {
             await _authService.VerifyEmailAsync(request, cancellationToken);
-            return NoContent();
+            return Ok(ApiResponse<object?>.Success(null));
         }
         catch (UnauthorizedException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Unauthorized(ApiResponse<object?>.Failure(ex.Message, StatusCodes.Status401Unauthorized));
         }
         catch (NotFoundException ex)
         {
-            return NotFound(new { message = ex.Message });
+            return NotFound(ApiResponse<object?>.Failure(ex.Message, StatusCodes.Status404NotFound));
         }
     }
 
     [AllowAnonymous]
     [HttpPost("resend-verification")]
-    public async Task<IActionResult> ResendVerification(
+    public async Task<ActionResult<ApiResponse<object?>>> ResendVerification(
         [FromBody] ResendVerificationRequestDto request,
         CancellationToken cancellationToken)
     {
         await _authService.ResendVerificationEmailAsync(request, cancellationToken);
-        return Ok(new { message = "If the email exists, a verification email has been sent." });
+        return Ok(ApiResponse<object?>.Success(new
+        {
+            message = "If the email exists, a verification email has been sent."
+        }));
     }
 
     [Authorize]
     [HttpGet("profile")]
-    public async Task<ActionResult<UserProfileDto>> Profile(CancellationToken cancellationToken)
+    public async Task<ActionResult<ApiResponse<UserProfileDto>>> Profile(CancellationToken cancellationToken)
     {
         try
         {
             var userId = GetCurrentUserId();
             var profile = await _authService.GetProfileAsync(userId, cancellationToken);
-            return Ok(profile);
+            return Ok(ApiResponse<UserProfileDto>.Success(profile));
         }
         catch (UnauthorizedException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Unauthorized(ApiResponse<UserProfileDto>.Failure(ex.Message, StatusCodes.Status401Unauthorized));
         }
         catch (NotFoundException ex)
         {
-            return NotFound(new { message = ex.Message });
+            return NotFound(ApiResponse<UserProfileDto>.Failure(ex.Message, StatusCodes.Status404NotFound));
         }
     }
 
     [Authorize]
     [HttpPut("profile")]
-    public async Task<ActionResult<UserProfileDto>> UpdateProfile(
+    public async Task<ActionResult<ApiResponse<UserProfileDto>>> UpdateProfile(
         [FromBody] UpdateProfileRequestDto request,
         CancellationToken cancellationToken)
     {
@@ -114,21 +118,21 @@ public class AuthController : ControllerBase
         {
             var userId = GetCurrentUserId();
             var profile = await _authService.UpdateProfileAsync(userId, request, cancellationToken);
-            return Ok(profile);
+            return Ok(ApiResponse<UserProfileDto>.Success(profile));
         }
         catch (UnauthorizedException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Unauthorized(ApiResponse<UserProfileDto>.Failure(ex.Message, StatusCodes.Status401Unauthorized));
         }
         catch (NotFoundException ex)
         {
-            return NotFound(new { message = ex.Message });
+            return NotFound(ApiResponse<UserProfileDto>.Failure(ex.Message, StatusCodes.Status404NotFound));
         }
     }
 
     [Authorize]
     [HttpPost("change-password")]
-    public async Task<IActionResult> ChangePassword(
+    public async Task<ActionResult<ApiResponse<object?>>> ChangePassword(
         [FromBody] ChangePasswordRequestDto request,
         CancellationToken cancellationToken)
     {
@@ -136,74 +140,77 @@ public class AuthController : ControllerBase
         {
             var userId = GetCurrentUserId();
             await _authService.ChangePasswordAsync(userId, request, cancellationToken);
-            return NoContent();
+            return Ok(ApiResponse<object?>.Success(null));
         }
         catch (UnauthorizedException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Unauthorized(ApiResponse<object?>.Failure(ex.Message, StatusCodes.Status401Unauthorized));
         }
         catch (NotFoundException ex)
         {
-            return NotFound(new { message = ex.Message });
+            return NotFound(ApiResponse<object?>.Failure(ex.Message, StatusCodes.Status404NotFound));
         }
     }
 
     [AllowAnonymous]
     [HttpPost("forgot-password")]
-    public async Task<IActionResult> ForgotPassword(
+    public async Task<ActionResult<ApiResponse<object?>>> ForgotPassword(
         [FromBody] ForgotPasswordRequestDto request,
         CancellationToken cancellationToken)
     {
         await _authService.RequestPasswordResetAsync(request, cancellationToken);
-        return Ok(new { message = "If the email exists, a password reset token has been sent." });
+        return Ok(ApiResponse<object?>.Success(new
+        {
+            message = "If the email exists, a password reset token has been sent."
+        }));
     }
 
     [AllowAnonymous]
     [HttpPost("reset-password")]
-    public async Task<IActionResult> ResetPassword(
+    public async Task<ActionResult<ApiResponse<object?>>> ResetPassword(
         [FromBody] ResetPasswordRequestDto request,
         CancellationToken cancellationToken)
     {
         try
         {
             await _authService.ResetPasswordAsync(request, cancellationToken);
-            return NoContent();
+            return Ok(ApiResponse<object?>.Success(null));
         }
         catch (UnauthorizedException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Unauthorized(ApiResponse<object?>.Failure(ex.Message, StatusCodes.Status401Unauthorized));
         }
         catch (NotFoundException ex)
         {
-            return NotFound(new { message = ex.Message });
+            return NotFound(ApiResponse<object?>.Failure(ex.Message, StatusCodes.Status404NotFound));
         }
     }
 
     [AllowAnonymous]
     [HttpPost("refresh-token")]
-    public async Task<ActionResult<AuthResponseDto>> RefreshToken(
+    public async Task<ActionResult<ApiResponse<AuthResponseDto>>> RefreshToken(
         [FromBody] RefreshTokenRequestDto request,
         CancellationToken cancellationToken)
     {
         try
         {
             var response = await _authService.RefreshTokenAsync(request, cancellationToken);
-            return Ok(response);
+            return Ok(ApiResponse<AuthResponseDto>.Success(response));
         }
         catch (UnauthorizedException ex)
         {
-            return Unauthorized(new { message = ex.Message });
+            return Unauthorized(ApiResponse<AuthResponseDto>.Failure(ex.Message, StatusCodes.Status401Unauthorized));
         }
     }
 
     [Authorize]
     [HttpPost("logout")]
-    public async Task<IActionResult> Logout(
+    public async Task<ActionResult<ApiResponse<object?>>> Logout(
         [FromBody] RefreshTokenRequestDto request,
         CancellationToken cancellationToken)
     {
         await _authService.LogoutAsync(request, cancellationToken);
-        return NoContent();
+        return Ok(ApiResponse<object?>.Success(null));
     }
 
     private Guid GetCurrentUserId()
