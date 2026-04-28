@@ -7,6 +7,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace GadiSewa.API.Controllers;
 
@@ -15,6 +16,9 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "AdminOnly")]
 public sealed class AdminUsersController : ControllerBase
 {
+    private const string BootstrapKeyHeaderName = "X-Admin-Bootstrap-Key";
+
+    private readonly IConfiguration _configuration;
     private readonly IUserRepository _userRepository;
     private readonly IRepository<Staff> _staffRepository;
     private readonly IRepository<RefreshToken> _refreshTokenRepository;
@@ -28,14 +32,44 @@ public sealed class AdminUsersController : ControllerBase
         IRepository<RefreshToken> refreshTokenRepository,
         IPasswordHasherService passwordHasherService,
         IEmailService emailService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IConfiguration configuration)
     {
+        _configuration = configuration;
         _userRepository = userRepository;
         _staffRepository = staffRepository;
         _refreshTokenRepository = refreshTokenRepository;
         _passwordHasherService = passwordHasherService;
         _emailService = emailService;
         _unitOfWork = unitOfWork;
+    }
+
+    [AllowAnonymous]
+    [HttpPost("bootstrap-admin")]
+    [SwaggerOperation(
+        Summary = "Bootstrap the first admin account",
+        Description = "Use this only once when the system has no admin users yet. Send the X-Admin-Bootstrap-Key header with the secret configured in appsettings, and this endpoint will create a full-admin account.")]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ApiResponse<UserProfileDto>>> BootstrapAdmin(
+        [FromBody] CreateAdminRequestDto request,
+        [FromHeader(Name = BootstrapKeyHeaderName)] string bootstrapKey,
+        CancellationToken cancellationToken)
+    {
+        if (!HasValidBootstrapKey(bootstrapKey))
+        {
+            return Unauthorized(ApiResponse<UserProfileDto>.Failure("Invalid admin bootstrap key.", StatusCodes.Status401Unauthorized));
+        }
+
+        var existingAdmins = await _userRepository.ListAsync(x => x.Role == UserRole.Admin, cancellationToken);
+        if (existingAdmins.Count > 0)
+        {
+            return Conflict(ApiResponse<UserProfileDto>.Failure("An admin account already exists.", StatusCodes.Status409Conflict));
+        }
+
+        var user = await CreateAdminUserAsync(request, cancellationToken);
+        return Ok(ApiResponse<UserProfileDto>.Success(UserProfileDto.FromUser(user)));
     }
 
     [HttpGet]
@@ -59,6 +93,11 @@ public sealed class AdminUsersController : ControllerBase
     }
 
     [HttpPost("staff")]
+    [SwaggerOperation(
+        Summary = "Create a staff account",
+        Description = "Creates a staff account under an existing admin session.")]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ApiResponse<UserProfileDto>>> CreateStaff(
         [FromBody] CreateStaffRequestDto request,
         CancellationToken cancellationToken)
@@ -107,6 +146,20 @@ public sealed class AdminUsersController : ControllerBase
         return Ok(ApiResponse<UserProfileDto>.Success(UserProfileDto.FromUser(user)));
     }
 
+    [HttpPost("admin")]
+    [SwaggerOperation(
+        Summary = "Create an admin account",
+        Description = "Creates an admin account after you are already signed in as an admin. This endpoint is for ongoing admin management after the first bootstrap account exists.")]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ApiResponse<UserProfileDto>>> CreateAdmin(
+        [FromBody] CreateAdminRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var user = await CreateAdminUserAsync(request, cancellationToken);
+        return Ok(ApiResponse<UserProfileDto>.Success(UserProfileDto.FromUser(user)));
+    }
+
     [HttpPut("{id:guid}/status")]
     public async Task<ActionResult<ApiResponse<object?>>> UpdateStatus(
         Guid id,
@@ -135,5 +188,43 @@ public sealed class AdminUsersController : ControllerBase
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Ok(ApiResponse<object?>.Success(null));
+    }
+
+    private bool HasValidBootstrapKey(string? bootstrapKey)
+    {
+        var configuredKey = _configuration["AdminBootstrap:SetupKey"];
+        return !string.IsNullOrWhiteSpace(configuredKey)
+            && !string.IsNullOrWhiteSpace(bootstrapKey)
+            && string.Equals(bootstrapKey, configuredKey, StringComparison.Ordinal);
+    }
+
+    private async Task<User> CreateAdminUserAsync(CreateAdminRequestDto request, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var existingUser = await _userRepository.GetByEmailAsync(normalizedEmail, cancellationToken);
+        if (existingUser is not null)
+        {
+            throw new ConflictException("A user with this email already exists.");
+        }
+
+        var user = new User
+        {
+            FirstName = request.FirstName.Trim(),
+            LastName = request.LastName.Trim(),
+            Email = normalizedEmail,
+            PhoneNumber = request.PhoneNumber.Trim(),
+            PasswordHash = _passwordHasherService.HashPassword(request.Password),
+            Role = UserRole.Admin,
+            IsActive = true,
+            IsEmailVerified = true,
+            EmailVerifiedAt = DateTimeOffset.UtcNow
+        };
+
+        await _userRepository.AddAsync(user, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await _emailService.SendWelcomeEmailAsync(user.Email, $"{user.FirstName} {user.LastName}".Trim(), cancellationToken);
+
+        return user;
     }
 }
