@@ -1,8 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace GadiSewa.Application.DTOs.Auth;
+namespace GadiSewa.Application.DTOs.Customers;
 
-public sealed class RegisterRequestDto
+public sealed class CreateCustomerRequestDto
 {
     [Required]
     [MaxLength(100)]
@@ -22,4 +22,10 @@ public sealed class RegisterRequestDto
 
     [MaxLength(20)]
     public string PhoneNumber { get; init; } = string.Empty;
+
+    [MaxLength(300)]
+    public string Address { get; init; } = string.Empty;
+
+    [Required]
+    public List<CreateVehicleRequestDto> Vehicles { get; init; } = new();
 }

@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace GadiSewa.Application.DTOs.Auth;
 
-public sealed class RegisterRequestDto
+public sealed class CreateStaffRequestDto
 {
     [Required]
     [MaxLength(100)]
@@ -22,4 +22,15 @@ public sealed class RegisterRequestDto
 
     [MaxLength(20)]
     public string PhoneNumber { get; init; } = string.Empty;
+
+    [Required]
+    [MaxLength(50)]
+    public string EmployeeCode { get; init; } = string.Empty;
+
+    [Required]
+    [MaxLength(100)]
+    public string Position { get; init; } = string.Empty;
+
+    [Required]
+    public DateOnly HireDate { get; init; }
 }

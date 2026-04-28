@@ -19,6 +19,10 @@ public class User : BaseEntity
 
     public bool IsActive { get; set; } = true;
 
+    public bool IsEmailVerified { get; set; }
+
+    public DateTimeOffset? EmailVerifiedAt { get; set; }
+
     public DateTimeOffset? LastLoginAt { get; set; }
 
     public Staff? StaffProfile { get; set; }
