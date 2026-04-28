@@ -8,6 +8,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace GadiSewa.API.Controllers;
 
@@ -131,6 +132,282 @@ public sealed class StaffCustomersController : ControllerBase
         catch (ConflictException ex)
         {
             return Conflict(ApiResponse<CustomerRegistrationResponseDto>.Failure(ex.Message, StatusCodes.Status409Conflict));
+        }
+    }
+
+    /// <summary>
+    /// Search customers by vehicle registration, phone, name, or ID
+    /// </summary>
+    [HttpGet("search")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CustomerSearchResultDto>>>> SearchCustomers(
+        [FromQuery] string? query,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (pageNumber < 1) pageNumber = 1;
+            if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+            IQueryable<Customer> customersQuery = _customerRepository.Query()
+                .AsNoTracking()
+                .Include(c => c.User)
+                .Include(c => c.Vehicles)
+                .Include(c => c.Appointments)
+                .Include(c => c.Reviews);
+
+            // Apply filter if query provided
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                var searchTerm = query.Trim().ToLowerInvariant();
+                customersQuery = customersQuery.Where(c =>
+                    c.User.FirstName.ToLower().Contains(searchTerm) ||
+                    c.User.LastName.ToLower().Contains(searchTerm) ||
+                    c.User.Email.ToLower().Contains(searchTerm) ||
+                    c.User.PhoneNumber.Contains(searchTerm) ||
+                    c.Vehicles.Any(v => v.RegistrationNumber.ToLower().Contains(searchTerm)) ||
+                    c.Id.ToString().StartsWith(searchTerm));
+            }
+
+            var totalCount = await customersQuery.CountAsync(cancellationToken);
+
+            var results = await customersQuery
+                .OrderBy(c => c.User.LastName)
+                .ThenBy(c => c.User.FirstName)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(cancellationToken);
+
+            var dtos = results.Select(c => new CustomerSearchResultDto
+            {
+                CustomerId = c.Id,
+                UserId = c.UserId,
+                FirstName = c.User.FirstName,
+                LastName = c.User.LastName,
+                Email = c.User.Email,
+                PhoneNumber = c.User.PhoneNumber,
+                Address = c.Address,
+                LoyaltyPoints = c.LoyaltyPoints,
+                VehicleCount = c.Vehicles.Count,
+                AppointmentCount = c.Appointments.Count,
+                ReviewCount = c.Reviews.Count,
+                IsActive = c.User.IsActive,
+                Vehicles = c.Vehicles.Select(v => new CustomerVehicleDto
+                {
+                    VehicleId = v.Id,
+                    RegistrationNumber = v.RegistrationNumber,
+                    Make = v.Make,
+                    Model = v.Model,
+                    Year = v.Year,
+                    Color = v.Color
+                }).ToList()
+            }).ToList();
+
+            return Ok(ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Success(dtos));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Failure(
+                    $"Error searching customers: {ex.Message}",
+                    StatusCodes.Status500InternalServerError));
+        }
+    }
+
+    /// <summary>
+    /// Get customer details by ID
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ApiResponse<CustomerSearchResultDto>>> GetCustomerDetails(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            IQueryable<Customer> query = _customerRepository.Query()
+                .AsNoTracking()
+                .Include(c => c.User)
+                .Include(c => c.Vehicles)
+                .Include(c => c.Appointments)
+                .Include(c => c.Reviews);
+
+            var customer = await query
+                .Where(c => c.Id == id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (customer is null)
+            {
+                return NotFound(ApiResponse<CustomerSearchResultDto>.Failure(
+                    "Customer not found.",
+                    StatusCodes.Status404NotFound));
+            }
+
+            var dto = new CustomerSearchResultDto
+            {
+                CustomerId = customer.Id,
+                UserId = customer.UserId,
+                FirstName = customer.User.FirstName,
+                LastName = customer.User.LastName,
+                Email = customer.User.Email,
+                PhoneNumber = customer.User.PhoneNumber,
+                Address = customer.Address,
+                LoyaltyPoints = customer.LoyaltyPoints,
+                VehicleCount = customer.Vehicles.Count,
+                AppointmentCount = customer.Appointments.Count,
+                ReviewCount = customer.Reviews.Count,
+                IsActive = customer.User.IsActive,
+                Vehicles = customer.Vehicles.Select(v => new CustomerVehicleDto
+                {
+                    VehicleId = v.Id,
+                    RegistrationNumber = v.RegistrationNumber,
+                    Make = v.Make,
+                    Model = v.Model,
+                    Year = v.Year,
+                    Color = v.Color
+                }).ToList()
+            };
+
+            return Ok(ApiResponse<CustomerSearchResultDto>.Success(dto));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<CustomerSearchResultDto>.Failure(
+                    $"Error retrieving customer: {ex.Message}",
+                    StatusCodes.Status500InternalServerError));
+        }
+    }
+
+    /// <summary>
+    /// Search by vehicle registration number
+    /// </summary>
+    [HttpGet("by-vehicle/{registrationNumber}")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CustomerSearchResultDto>>>> SearchByVehicleRegistration(
+        string registrationNumber,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(registrationNumber))
+            {
+                return BadRequest(ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Failure(
+                    "Registration number is required.",
+                    StatusCodes.Status400BadRequest));
+            }
+
+            var normalizedRegNo = registrationNumber.Trim().ToUpperInvariant();
+
+            IQueryable<Customer> query = _customerRepository.Query()
+                .AsNoTracking()
+                .Include(c => c.User)
+                .Include(c => c.Vehicles)
+                .Include(c => c.Appointments)
+                .Include(c => c.Reviews);
+
+            var results = await query
+                .Where(c => c.Vehicles.Any(v => v.RegistrationNumber.ToUpper() == normalizedRegNo))
+                .ToListAsync(cancellationToken);
+
+            var dtos = results.Select(c => new CustomerSearchResultDto
+            {
+                CustomerId = c.Id,
+                UserId = c.UserId,
+                FirstName = c.User.FirstName,
+                LastName = c.User.LastName,
+                Email = c.User.Email,
+                PhoneNumber = c.User.PhoneNumber,
+                Address = c.Address,
+                LoyaltyPoints = c.LoyaltyPoints,
+                VehicleCount = c.Vehicles.Count,
+                AppointmentCount = c.Appointments.Count,
+                ReviewCount = c.Reviews.Count,
+                IsActive = c.User.IsActive,
+                Vehicles = c.Vehicles.Select(v => new CustomerVehicleDto
+                {
+                    VehicleId = v.Id,
+                    RegistrationNumber = v.RegistrationNumber,
+                    Make = v.Make,
+                    Model = v.Model,
+                    Year = v.Year,
+                    Color = v.Color
+                }).ToList()
+            }).ToList();
+
+            return Ok(ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Success(dtos));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Failure(
+                    $"Error searching by vehicle: {ex.Message}",
+                    StatusCodes.Status500InternalServerError));
+        }
+    }
+
+    /// <summary>
+    /// Search by phone number
+    /// </summary>
+    [HttpGet("by-phone/{phoneNumber}")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CustomerSearchResultDto>>>> SearchByPhone(
+        string phoneNumber,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(phoneNumber))
+            {
+                return BadRequest(ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Failure(
+                    "Phone number is required.",
+                    StatusCodes.Status400BadRequest));
+            }
+
+            var normalizedPhone = phoneNumber.Trim();
+
+            IQueryable<Customer> query = _customerRepository.Query()
+                .AsNoTracking()
+                .Include(c => c.User)
+                .Include(c => c.Vehicles)
+                .Include(c => c.Appointments)
+                .Include(c => c.Reviews);
+
+            var results = await query
+                .Where(c => c.User.PhoneNumber.Contains(normalizedPhone))
+                .ToListAsync(cancellationToken);
+
+            var dtos = results.Select(c => new CustomerSearchResultDto
+            {
+                CustomerId = c.Id,
+                UserId = c.UserId,
+                FirstName = c.User.FirstName,
+                LastName = c.User.LastName,
+                Email = c.User.Email,
+                PhoneNumber = c.User.PhoneNumber,
+                Address = c.Address,
+                LoyaltyPoints = c.LoyaltyPoints,
+                VehicleCount = c.Vehicles.Count,
+                AppointmentCount = c.Appointments.Count,
+                ReviewCount = c.Reviews.Count,
+                IsActive = c.User.IsActive,
+                Vehicles = c.Vehicles.Select(v => new CustomerVehicleDto
+                {
+                    VehicleId = v.Id,
+                    RegistrationNumber = v.RegistrationNumber,
+                    Make = v.Make,
+                    Model = v.Model,
+                    Year = v.Year,
+                    Color = v.Color
+                }).ToList()
+            }).ToList();
+
+            return Ok(ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Success(dtos));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Failure(
+                    $"Error searching by phone: {ex.Message}",
+                    StatusCodes.Status500InternalServerError));
         }
     }
 }
