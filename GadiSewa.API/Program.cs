@@ -7,6 +7,18 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowReactApp", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
+
 builder.Services.AddControllers();
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -40,6 +52,10 @@ builder.Services
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+
+app.UseCors("AllowReactApp"); 
+
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
