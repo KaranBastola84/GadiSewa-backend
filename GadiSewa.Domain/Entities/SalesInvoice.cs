@@ -21,9 +21,13 @@ public class SalesInvoice : BaseEntity
 
     public decimal DiscountAmount { get; set; }
 
+    public bool LoyaltyApplied { get; set; }
+
     public decimal TaxAmount { get; set; }
 
     public decimal TotalAmount { get; set; }
+
+    public decimal AmountDue { get; set; }
 
     public InvoiceStatus Status { get; set; } = InvoiceStatus.Unpaid;
 

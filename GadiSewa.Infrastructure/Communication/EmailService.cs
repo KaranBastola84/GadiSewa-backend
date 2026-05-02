@@ -45,7 +45,13 @@ public sealed class EmailService : IEmailService
         return SendEmailAsync(toEmail, subject, body, cancellationToken);
     }
 
-    private async Task SendEmailAsync(string toEmail, string subject, string body, CancellationToken cancellationToken)
+    public Task SendSalesInvoiceEmailAsync(string toEmail, string customerName, string invoiceNumber, string invoiceHtml, CancellationToken cancellationToken = default)
+    {
+        var subject = $"Your GadiSewa Invoice {invoiceNumber}";
+        return SendEmailAsync(toEmail, subject, invoiceHtml, cancellationToken, isBodyHtml: true);
+    }
+
+    private async Task SendEmailAsync(string toEmail, string subject, string body, CancellationToken cancellationToken, bool isBodyHtml = false)
     {
         if (string.IsNullOrWhiteSpace(_smtpOptions.Host) || string.IsNullOrWhiteSpace(_smtpOptions.FromEmail))
         {
@@ -58,7 +64,7 @@ public sealed class EmailService : IEmailService
             From = new MailAddress(_smtpOptions.FromEmail, string.IsNullOrWhiteSpace(_smtpOptions.FromName) ? _smtpOptions.FromEmail : _smtpOptions.FromName),
             Subject = subject,
             Body = body,
-            IsBodyHtml = false
+            IsBodyHtml = isBodyHtml
         };
 
         message.To.Add(toEmail);

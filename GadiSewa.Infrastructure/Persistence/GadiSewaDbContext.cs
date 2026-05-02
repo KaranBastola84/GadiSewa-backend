@@ -102,6 +102,7 @@ public sealed class GadiSewaDbContext : DbContext
         modelBuilder.Entity<Customer>(entity =>
         {
             entity.Property(x => x.Address).HasMaxLength(300);
+            entity.Property(x => x.TotalSpent).HasPrecision(18, 2);
         });
 
         modelBuilder.Entity<Vehicle>(entity =>
@@ -185,6 +186,7 @@ public sealed class GadiSewaDbContext : DbContext
             entity.Property(x => x.DiscountAmount).HasPrecision(18, 2);
             entity.Property(x => x.TaxAmount).HasPrecision(18, 2);
             entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.AmountDue).HasPrecision(18, 2);
             entity.Property(x => x.Status).HasConversion<int>();
 
             entity
