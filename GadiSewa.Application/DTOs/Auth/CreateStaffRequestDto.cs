@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Swashbuckle.AspNetCore.Annotations;
 
 namespace GadiSewa.Application.DTOs.Auth;
 
@@ -23,8 +24,8 @@ public sealed class CreateStaffRequestDto
     [MaxLength(20)]
     public string PhoneNumber { get; init; } = string.Empty;
 
-    [Required]
     [MaxLength(50)]
+    [SwaggerSchema(Description = "Optional. If not provided, an employee code will be auto-generated in the format: EMPyyyyMMddNNN")]
     public string EmployeeCode { get; init; } = string.Empty;
 
     [Required]
