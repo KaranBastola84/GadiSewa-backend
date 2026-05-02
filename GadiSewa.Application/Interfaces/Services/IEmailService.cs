@@ -7,4 +7,6 @@ public interface IEmailService
     Task SendWelcomeEmailAsync(string email, string fullName, CancellationToken cancellationToken = default);
 
     Task SendPasswordResetEmailAsync(string email, string fullName, string resetToken, CancellationToken cancellationToken = default);
+
+    Task SendLowStockAlertAsync(string toEmail, string partName, int stockQuantity, CancellationToken cancellationToken = default);
 }

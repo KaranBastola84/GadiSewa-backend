@@ -38,6 +38,13 @@ public sealed class EmailService : IEmailService
         return SendEmailAsync(email, subject, body, cancellationToken);
     }
 
+    public Task SendLowStockAlertAsync(string toEmail, string partName, int stockQuantity, CancellationToken cancellationToken = default)
+    {
+        var subject = $"Low stock alert: {partName}";
+        var body = $"Attention,\n\nThe part '{partName}' has low stock (current quantity: {stockQuantity}). Please reorder as soon as possible.\n\nRegards,\nGadiSewa System";
+        return SendEmailAsync(toEmail, subject, body, cancellationToken);
+    }
+
     private async Task SendEmailAsync(string toEmail, string subject, string body, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_smtpOptions.Host) || string.IsNullOrWhiteSpace(_smtpOptions.FromEmail))
