@@ -11,4 +11,6 @@ public interface IEmailService
     Task SendLowStockAlertAsync(string toEmail, string partName, int stockQuantity, CancellationToken cancellationToken = default);
 
     Task SendSalesInvoiceEmailAsync(string toEmail, string customerName, string invoiceNumber, string invoiceHtml, CancellationToken cancellationToken = default);
+
+    Task SendOverdueReminderEmailAsync(string toEmail, string customerName, string invoiceNumber, decimal amountDue, DateTimeOffset dueDate, CancellationToken cancellationToken = default);
 }

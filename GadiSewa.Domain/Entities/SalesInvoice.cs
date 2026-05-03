@@ -27,7 +27,11 @@ public class SalesInvoice : BaseEntity
 
     public decimal TotalAmount { get; set; }
 
+    public decimal AmountPaid { get; set; }
+
     public decimal AmountDue { get; set; }
+
+    public DateTimeOffset? OverdueReminderSentAt { get; set; }
 
     public InvoiceStatus Status { get; set; } = InvoiceStatus.Unpaid;
 

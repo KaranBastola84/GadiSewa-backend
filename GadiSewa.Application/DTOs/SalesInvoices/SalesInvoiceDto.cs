@@ -32,6 +32,8 @@ public sealed class SalesInvoiceDto
 
     public decimal TotalAmount { get; init; }
 
+    public decimal AmountPaid { get; init; }
+
     public decimal AmountDue { get; init; }
 
     public string Status { get; init; } = string.Empty;

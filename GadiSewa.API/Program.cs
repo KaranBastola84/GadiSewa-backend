@@ -79,6 +79,7 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole(UserRole.Admin.ToString()));
     options.AddPolicy("StaffOnly", policy => policy.RequireRole(UserRole.Staff.ToString()));
+    options.AddPolicy("BackOfficeOnly", policy => policy.RequireRole(UserRole.Admin.ToString(), UserRole.Staff.ToString()));
     options.AddPolicy("CustomerOnly", policy => policy.RequireRole(UserRole.Customer.ToString()));
 });
 

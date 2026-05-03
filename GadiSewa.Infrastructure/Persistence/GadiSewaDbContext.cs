@@ -186,6 +186,7 @@ public sealed class GadiSewaDbContext : DbContext
             entity.Property(x => x.DiscountAmount).HasPrecision(18, 2);
             entity.Property(x => x.TaxAmount).HasPrecision(18, 2);
             entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            entity.Property(x => x.AmountPaid).HasPrecision(18, 2);
             entity.Property(x => x.AmountDue).HasPrecision(18, 2);
             entity.Property(x => x.Status).HasConversion<int>();
 
@@ -302,6 +303,8 @@ public sealed class GadiSewaDbContext : DbContext
         modelBuilder.Entity<CreditPayment>(entity =>
         {
             entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.AmountBeforePayment).HasPrecision(18, 2);
+            entity.Property(x => x.AmountAfterPayment).HasPrecision(18, 2);
             entity.Property(x => x.PaymentMethod).HasMaxLength(50);
             entity.Property(x => x.ReferenceNumber).HasMaxLength(100);
             entity.Property(x => x.Notes).HasMaxLength(500);

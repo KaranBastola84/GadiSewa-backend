@@ -90,6 +90,27 @@ public sealed class SalesInvoicesController : ControllerBase
         return Ok(ApiResponse<SalesInvoiceDto>.Success(MapToDto(invoice)));
     }
 
+    [HttpGet("overdue")]
+    [Authorize(Policy = "BackOfficeOnly")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<SalesInvoiceDto>>>> GetOverdueInvoices(CancellationToken cancellationToken)
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddMonths(-1);
+
+        var invoices = await _salesInvoiceRepository.Query()
+            .AsNoTracking()
+            .Where(i => i.AmountDue > 0 && i.DueDate.HasValue && i.DueDate.Value < cutoff)
+            .Include(i => i.Customer)
+                .ThenInclude(c => c.User)
+            .Include(i => i.CreatedByStaff)
+                .ThenInclude(s => s.User)
+            .Include(i => i.Items)
+                .ThenInclude(it => it.Part)
+            .OrderByDescending(i => i.DueDate)
+            .ToListAsync(cancellationToken);
+
+        return Ok(ApiResponse<IReadOnlyList<SalesInvoiceDto>>.Success(invoices.Select(MapToDto).ToList()));
+    }
+
     [HttpPost]
     [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<ApiResponse<SalesInvoiceDto>>> Create(
@@ -159,6 +180,7 @@ public sealed class SalesInvoicesController : ControllerBase
             LoyaltyApplied = loyaltyApplied,
             TaxAmount = taxAmount,
             TotalAmount = totalAmount,
+            AmountPaid = 0m,
             AmountDue = totalAmount,
             Status = request.Status
         };
@@ -308,7 +330,7 @@ public sealed class SalesInvoicesController : ControllerBase
         invoice.LoyaltyApplied = loyaltyApplied;
         invoice.TaxAmount = taxAmount;
         invoice.TotalAmount = totalAmount;
-        invoice.AmountDue = totalAmount;
+        invoice.AmountDue = Math.Max(totalAmount - invoice.AmountPaid, 0m);
         invoice.Status = request.Status;
         invoice.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -484,6 +506,7 @@ public sealed class SalesInvoicesController : ControllerBase
             LoyaltyApplied = invoice.LoyaltyApplied,
             TaxAmount = invoice.TaxAmount,
             TotalAmount = invoice.TotalAmount,
+            AmountPaid = invoice.AmountPaid,
             AmountDue = invoice.AmountDue,
             Status = invoice.Status.ToString(),
             Items = invoice.Items.Select(it => new SalesInvoiceItemDto

@@ -10,6 +10,10 @@ public class CreditPayment : BaseEntity
 
     public decimal Amount { get; set; }
 
+    public decimal AmountBeforePayment { get; set; }
+
+    public decimal AmountAfterPayment { get; set; }
+
     public DateTimeOffset PaymentDate { get; set; } = DateTimeOffset.UtcNow;
 
     public string PaymentMethod { get; set; } = string.Empty;
