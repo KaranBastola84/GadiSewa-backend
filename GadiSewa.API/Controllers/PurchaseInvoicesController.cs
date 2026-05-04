@@ -310,7 +310,7 @@ public sealed class PurchaseInvoicesController : ControllerBase
     {
         return new PurchaseInvoiceDto
         {
-            PurchaseInvoiceId = invoice.Id,
+            InvoiceId = invoice.Id,
             InvoiceNumber = invoice.InvoiceNumber,
             VendorId = invoice.VendorId,
             VendorName = invoice.Vendor?.Name ?? string.Empty,
@@ -326,7 +326,7 @@ public sealed class PurchaseInvoicesController : ControllerBase
             Status = invoice.Status.ToString(),
             Items = invoice.Items.Select(it => new PurchaseInvoiceItemDto
             {
-                PurchaseInvoiceItemId = it.Id,
+                ItemId = it.Id,
                 PartId = it.PartId,
                 PartName = it.Part?.Name ?? string.Empty,
                 PartNumber = it.Part?.PartNumber ?? string.Empty,

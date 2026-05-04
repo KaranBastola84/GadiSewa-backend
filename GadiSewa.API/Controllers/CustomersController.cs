@@ -566,7 +566,7 @@ public sealed class CustomersController : ControllerBase
         var dto = new CustomerHistorySummaryDto
         {
             CustomerId = id,
-            Appointments = appointments.Select(a => new AppointmentHistoryItemDto
+            RecentAppointments = appointments.Select(a => new AppointmentHistoryItemDto
             {
                 AppointmentId = a.Id,
                 AppointmentNumber = a.AppointmentNumber,
@@ -577,7 +577,7 @@ public sealed class CustomersController : ControllerBase
                 VehicleRegistration = a.Vehicle.RegistrationNumber,
                 AssignedStaffName = a.AssignedStaff is not null ? $"{a.AssignedStaff.User.FirstName} {a.AssignedStaff.User.LastName}".Trim() : ""
             }).ToList(),
-            Invoices = invoices.Select(i => new SalesInvoiceHistoryItemDto
+            RecentInvoices = invoices.Select(i => new SalesInvoiceHistoryItemDto
             {
                 InvoiceId = i.Id,
                 InvoiceNumber = i.InvoiceNumber,

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using GadiSewa.Domain.Enums;
 
 namespace GadiSewa.Application.DTOs.PurchaseInvoices;
 
@@ -14,6 +15,11 @@ public sealed class CreatePurchaseInvoiceRequestDto
 
     [Range(0, double.MaxValue, ErrorMessage = "Tax amount must be non-negative.")]
     public decimal TaxAmount { get; init; }
+
+    [Range(0, 100, ErrorMessage = "Tax rate must be between 0 and 100.")]
+    public decimal TaxRatePercent { get; init; }
+
+    public InvoiceStatus Status { get; init; } = InvoiceStatus.Unpaid;
 
     [Required(ErrorMessage = "At least one item is required.")]
     [MinLength(1, ErrorMessage = "At least one item is required.")]
