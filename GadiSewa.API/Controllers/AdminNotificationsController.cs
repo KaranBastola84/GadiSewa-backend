@@ -21,7 +21,7 @@ public sealed class AdminNotificationsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<NotificationLogDto>>>> GetNotifications(
+    public async Task<ActionResult<ApiResponse<NotificationLogPagedResultDto>>> GetNotifications(
         [FromQuery] string? type,
         [FromQuery] string? channel,
         [FromQuery] string? recipient,
@@ -70,17 +70,28 @@ public sealed class AdminNotificationsController : ControllerBase
             query = query.Where(n => n.SentAt <= to.Value);
         }
 
+        var totalCount = await query.CountAsync(cancellationToken);
+
         var notifications = await query
             .OrderByDescending(n => n.SentAt)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        var result = notifications
-            .Select(NotificationLogDto.FromEntity)
-            .ToList();
+        var totalPages = totalCount == 0
+            ? 0
+            : (int)Math.Ceiling(totalCount / (double)pageSize);
 
-        return Ok(ApiResponse<IReadOnlyList<NotificationLogDto>>.Success(result));
+        var result = new NotificationLogPagedResultDto
+        {
+            Items = notifications.Select(NotificationLogDto.FromEntity).ToList(),
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+            TotalCount = totalCount,
+            TotalPages = totalPages
+        };
+
+        return Ok(ApiResponse<NotificationLogPagedResultDto>.Success(result));
     }
 
     [HttpGet("{id:guid}")]
