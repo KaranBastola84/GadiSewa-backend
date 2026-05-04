@@ -8,6 +8,7 @@ using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
+using System.Security.Claims;
 
 namespace GadiSewa.API.Controllers;
 
@@ -95,7 +96,7 @@ public sealed class AdminUsersController : ControllerBase
     [HttpPost("staff")]
     [SwaggerOperation(
         Summary = "Create a staff account",
-        Description = "Creates a staff account under an existing admin session.")]
+        Description = "Creates a staff account under an existing admin session. EmployeeCode is auto-generated if not provided.")]
     [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<UserProfileDto>), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ApiResponse<UserProfileDto>>> CreateStaff(
@@ -109,7 +110,12 @@ public sealed class AdminUsersController : ControllerBase
             throw new ConflictException("A user with this email already exists.");
         }
 
-        var existingStaff = await _staffRepository.ListAsync(x => x.EmployeeCode == request.EmployeeCode.Trim(), cancellationToken);
+        // Auto-generate EmployeeCode if not provided or empty
+        var employeeCode = string.IsNullOrWhiteSpace(request.EmployeeCode)
+            ? await GenerateUniqueEmployeeCodeAsync(cancellationToken)
+            : request.EmployeeCode.Trim();
+
+        var existingStaff = await _staffRepository.ListAsync(x => x.EmployeeCode == employeeCode, cancellationToken);
         if (existingStaff.Count > 0)
         {
             throw new ConflictException("A staff member with this employee code already exists.");
@@ -131,7 +137,7 @@ public sealed class AdminUsersController : ControllerBase
         var staff = new Staff
         {
             UserId = user.Id,
-            EmployeeCode = request.EmployeeCode.Trim(),
+            EmployeeCode = employeeCode,
             Position = request.Position.Trim(),
             HireDate = request.HireDate,
             IsAvailable = true
@@ -166,6 +172,16 @@ public sealed class AdminUsersController : ControllerBase
         [FromBody] UpdateUserStatusRequestDto request,
         CancellationToken cancellationToken)
     {
+        var currentUserId = GetCurrentUserId();
+
+        // Prevent admin from deactivating their own account
+        if (id == currentUserId)
+        {
+            return BadRequest(ApiResponse<object?>.Failure(
+                "You cannot deactivate your own account.",
+                StatusCodes.Status400BadRequest));
+        }
+
         var user = await _userRepository.GetByIdAsync(id, cancellationToken);
         if (user is null)
         {
@@ -196,6 +212,42 @@ public sealed class AdminUsersController : ControllerBase
         return !string.IsNullOrWhiteSpace(configuredKey)
             && !string.IsNullOrWhiteSpace(bootstrapKey)
             && string.Equals(bootstrapKey, configuredKey, StringComparison.Ordinal);
+    }
+
+    private Guid GetCurrentUserId()
+    {
+        var userIdValue = User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdValue, out var userId))
+        {
+            throw new UnauthorizedException("Invalid user identity.");
+        }
+
+        return userId;
+    }
+
+    private async Task<string> GenerateUniqueEmployeeCodeAsync(CancellationToken cancellationToken)
+    {
+        // Format: EMP + timestamp + random suffix
+        // Example: EMP20260502001, EMP20260502002, etc.
+        var datePrefix = DateTimeOffset.UtcNow.ToString("yyyyMMdd");
+        var allStaffCodes = await _staffRepository.ListAsync(cancellationToken: cancellationToken);
+
+        var codesWithPrefix = allStaffCodes
+            .Select(s => s.EmployeeCode)
+            .Where(c => c.StartsWith($"EMP{datePrefix}"))
+            .ToList();
+
+        var nextNumber = codesWithPrefix.Count + 1;
+        var employeeCode = $"EMP{datePrefix}{nextNumber:D3}";
+
+        // Ensure uniqueness (backup check)
+        while (allStaffCodes.Any(s => s.EmployeeCode == employeeCode))
+        {
+            nextNumber++;
+            employeeCode = $"EMP{datePrefix}{nextNumber:D3}";
+        }
+
+        return employeeCode;
     }
 
     private async Task<User> CreateAdminUserAsync(CreateAdminRequestDto request, CancellationToken cancellationToken)

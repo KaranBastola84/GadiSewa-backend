@@ -10,6 +10,8 @@ public class Customer : BaseEntity
 
     public int LoyaltyPoints { get; set; }
 
+    public decimal TotalSpent { get; set; }
+
     public User User { get; set; } = null!;
 
     public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();

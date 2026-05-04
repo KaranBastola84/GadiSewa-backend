@@ -38,7 +38,34 @@ public sealed class EmailService : IEmailService
         return SendEmailAsync(email, subject, body, cancellationToken);
     }
 
-    private async Task SendEmailAsync(string toEmail, string subject, string body, CancellationToken cancellationToken)
+    public Task SendLowStockAlertAsync(string toEmail, string partName, int stockQuantity, CancellationToken cancellationToken = default)
+    {
+        var subject = $"Low stock alert: {partName}";
+        var body = $"Attention,\n\nThe part '{partName}' has low stock (current quantity: {stockQuantity}). Please reorder as soon as possible.\n\nRegards,\nGadiSewa System";
+        return SendEmailAsync(toEmail, subject, body, cancellationToken);
+    }
+
+    public Task SendSalesInvoiceEmailAsync(string toEmail, string customerName, string invoiceNumber, string invoiceHtml, CancellationToken cancellationToken = default)
+    {
+        var subject = $"Your GadiSewa Invoice {invoiceNumber}";
+        return SendEmailAsync(toEmail, subject, invoiceHtml, cancellationToken, isBodyHtml: true);
+    }
+
+    public Task SendOverdueReminderEmailAsync(string toEmail, string customerName, string invoiceNumber, decimal amountDue, DateTimeOffset dueDate, CancellationToken cancellationToken = default)
+    {
+        var subject = $"Overdue payment reminder for invoice {invoiceNumber}";
+        var body = $"<html><body style='font-family:Segoe UI,Arial,sans-serif;'>" +
+                   $"<p>Hello {System.Net.WebUtility.HtmlEncode(customerName)},</p>" +
+                   $"<p>This is a reminder that invoice <strong>{System.Net.WebUtility.HtmlEncode(invoiceNumber)}</strong> is overdue.</p>" +
+                   $"<p><strong>Due date:</strong> {dueDate:yyyy-MM-dd}</p>" +
+                   $"<p><strong>Outstanding amount:</strong> {amountDue:N2}</p>" +
+                   $"<p>Please make the payment as soon as possible.</p>" +
+                   $"<p>Regards,<br/>GadiSewa Team</p>" +
+                   $"</body></html>";
+        return SendEmailAsync(toEmail, subject, body, cancellationToken, isBodyHtml: true);
+    }
+
+    private async Task SendEmailAsync(string toEmail, string subject, string body, CancellationToken cancellationToken, bool isBodyHtml = false)
     {
         if (string.IsNullOrWhiteSpace(_smtpOptions.Host) || string.IsNullOrWhiteSpace(_smtpOptions.FromEmail))
         {
@@ -51,7 +78,7 @@ public sealed class EmailService : IEmailService
             From = new MailAddress(_smtpOptions.FromEmail, string.IsNullOrWhiteSpace(_smtpOptions.FromName) ? _smtpOptions.FromEmail : _smtpOptions.FromName),
             Subject = subject,
             Body = body,
-            IsBodyHtml = false
+            IsBodyHtml = isBodyHtml
         };
 
         message.To.Add(toEmail);

@@ -2,6 +2,7 @@ using GadiSewa.Application.Common.Exceptions;
 using GadiSewa.Application.Common.Responses;
 using GadiSewa.Application.DTOs.Parts;
 using GadiSewa.Application.Interfaces.Persistence;
+using GadiSewa.Application.Interfaces.Services;
 using GadiSewa.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,11 +15,25 @@ namespace GadiSewa.API.Controllers;
 public sealed class AdminPartsController : ControllerBase
 {
     private readonly IRepository<Part> _partRepository;
+    private readonly IRepository<PurchaseInvoiceItem> _purchaseInvoiceItemRepository;
+    private readonly IRepository<SalesInvoiceItem> _salesInvoiceItemRepository;
+    private readonly IUserRepository _userRepository;
+    private readonly IEmailService _emailService;
     private readonly IUnitOfWork _unitOfWork;
 
-    public AdminPartsController(IRepository<Part> partRepository, IUnitOfWork unitOfWork)
+    public AdminPartsController(
+        IRepository<Part> partRepository,
+        IRepository<PurchaseInvoiceItem> purchaseInvoiceItemRepository,
+        IRepository<SalesInvoiceItem> salesInvoiceItemRepository,
+        IUserRepository userRepository,
+        IEmailService emailService,
+        IUnitOfWork unitOfWork)
     {
         _partRepository = partRepository;
+        _purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
+        _salesInvoiceItemRepository = salesInvoiceItemRepository;
+        _userRepository = userRepository;
+        _emailService = emailService;
         _unitOfWork = unitOfWork;
     }
 
@@ -64,6 +79,15 @@ public sealed class AdminPartsController : ControllerBase
         await _partRepository.AddAsync(part, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        if (part.StockQuantity < 10)
+        {
+            var admins = await _userRepository.ListAsync(u => u.Role == Domain.Enums.UserRole.Admin && u.IsActive, cancellationToken);
+            foreach (var admin in admins)
+            {
+                await _emailService.SendLowStockAlertAsync(admin.Email, part.Name, part.StockQuantity, cancellationToken);
+            }
+        }
+
         return StatusCode(StatusCodes.Status201Created, ApiResponse<PartDto>.Success(PartDto.FromPart(part), StatusCodes.Status201Created));
     }
 
@@ -93,6 +117,15 @@ public sealed class AdminPartsController : ControllerBase
         _partRepository.Update(part);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
+        if (part.StockQuantity < 10)
+        {
+            var admins = await _userRepository.ListAsync(u => u.Role == Domain.Enums.UserRole.Admin && u.IsActive, cancellationToken);
+            foreach (var admin in admins)
+            {
+                await _emailService.SendLowStockAlertAsync(admin.Email, part.Name, part.StockQuantity, cancellationToken);
+            }
+        }
+
         return Ok(ApiResponse<PartDto>.Success(PartDto.FromPart(part)));
     }
 
@@ -103,6 +136,13 @@ public sealed class AdminPartsController : ControllerBase
         if (part is null)
         {
             return NotFound(ApiResponse<object?>.Failure("Part not found.", StatusCodes.Status404NotFound));
+        }
+
+        var usedInPurchase = await _purchaseInvoiceItemRepository.ListAsync(pi => pi.PartId == id, cancellationToken);
+        var usedInSales = await _salesInvoiceItemRepository.ListAsync(si => si.PartId == id, cancellationToken);
+        if (usedInPurchase.Count > 0 || usedInSales.Count > 0)
+        {
+            return BadRequest(ApiResponse<object?>.Failure("Cannot delete part that is referenced in invoices.", StatusCodes.Status400BadRequest));
         }
 
         _partRepository.Remove(part);

@@ -5,6 +5,7 @@ using GadiSewa.Infrastructure.Communication;
 using GadiSewa.Infrastructure.Persistence;
 using GadiSewa.Infrastructure.Persistence.Repositories;
 using GadiSewa.Infrastructure.Security;
+using GadiSewa.Infrastructure.BackgroundJobs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasherService, PasswordHasherService>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddHostedService<OverdueInvoiceReminderHostedService>();
 
         return services;
     }
