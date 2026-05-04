@@ -97,10 +97,13 @@ builder.Services.AddAuthorization(options =>
 var app = builder.Build();
 
 
-app.UseCors("AllowReactApp"); 
+app.UseCors("AllowReactApp");
 
-
-app.UseHttpsRedirection();
+// Only use HTTPS redirection in production
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 if (app.Environment.IsDevelopment())
 {
