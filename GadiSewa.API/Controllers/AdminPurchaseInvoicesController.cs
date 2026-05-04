@@ -2,6 +2,7 @@ using GadiSewa.Application.Common.Exceptions;
 using GadiSewa.Application.Common.Responses;
 using GadiSewa.Application.DTOs.PurchaseInvoices;
 using GadiSewa.Application.Interfaces.Persistence;
+using GadiSewa.Application.Interfaces.Services;
 using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
@@ -20,7 +21,7 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
     private readonly IRepository<Part> _partRepository;
     private readonly IRepository<Vendor> _vendorRepository;
     private readonly IRepository<Staff> _staffRepository;
-    private readonly IUserRepository _userRepository;
+    private readonly INotificationService _notificationService;
     private readonly IUnitOfWork _unitOfWork;
 
     public AdminPurchaseInvoicesController(
@@ -29,7 +30,7 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         IRepository<Part> partRepository,
         IRepository<Vendor> vendorRepository,
         IRepository<Staff> staffRepository,
-        IUserRepository userRepository,
+        INotificationService notificationService,
         IUnitOfWork unitOfWork)
     {
         _purchaseInvoiceRepository = purchaseInvoiceRepository;
@@ -37,7 +38,7 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         _partRepository = partRepository;
         _vendorRepository = vendorRepository;
         _staffRepository = staffRepository;
-        _userRepository = userRepository;
+        _notificationService = notificationService;
         _unitOfWork = unitOfWork;
     }
 
@@ -378,7 +379,6 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
 
                 // Update part stock
                 item.Part.StockQuantity += receiveItem.QuantityReceived;
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
             }
 
             // Mark invoice as received (paid) if all items received
@@ -386,8 +386,12 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
                 request.Items.All(ri => ri.QuantityReceived == invoice.Items.First(i => i.Id == ri.ItemId).Quantity))
             {
                 invoice.Status = InvoiceStatus.Paid;
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
             }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _notificationService.CheckAndNotifyLowStockAsync(
+                request.Items.Select(ri => invoice.Items.First(i => i.Id == ri.ItemId).PartId),
+                cancellationToken);
 
             var dto = PurchaseInvoiceDto.FromEntity(
                 invoice,

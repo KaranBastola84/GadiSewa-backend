@@ -26,6 +26,7 @@ public static class DependencyInjection
 
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
         services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
+        services.Configure<NotificationOptions>(configuration.GetSection(NotificationOptions.SectionName));
 
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IUserRepository, UserRepository>();
@@ -34,6 +35,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasherService, PasswordHasherService>();
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<INotificationService, NotificationService>();
         services.AddHostedService<OverdueInvoiceReminderHostedService>();
 
         return services;

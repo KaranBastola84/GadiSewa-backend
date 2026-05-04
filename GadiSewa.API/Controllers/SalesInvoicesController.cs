@@ -2,6 +2,7 @@ using GadiSewa.Application.Common.Exceptions;
 using GadiSewa.Application.Common.Responses;
 using GadiSewa.Application.DTOs.SalesInvoices;
 using GadiSewa.Application.Interfaces.Persistence;
+using GadiSewa.Application.Interfaces.Services;
 using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
@@ -21,6 +22,7 @@ public sealed class SalesInvoicesController : ControllerBase
     private readonly IRepository<Part> _partRepository;
     private readonly IRepository<Appointment> _appointmentRepository;
     private readonly IRepository<CreditPayment> _creditPaymentRepository;
+    private readonly INotificationService _notificationService;
     private readonly IUnitOfWork _unitOfWork;
 
     public SalesInvoicesController(
@@ -30,6 +32,7 @@ public sealed class SalesInvoicesController : ControllerBase
         IRepository<Part> partRepository,
         IRepository<Appointment> appointmentRepository,
         IRepository<CreditPayment> creditPaymentRepository,
+        INotificationService notificationService,
         IUnitOfWork unitOfWork)
     {
         _salesInvoiceRepository = salesInvoiceRepository;
@@ -38,6 +41,7 @@ public sealed class SalesInvoicesController : ControllerBase
         _partRepository = partRepository;
         _appointmentRepository = appointmentRepository;
         _creditPaymentRepository = creditPaymentRepository;
+        _notificationService = notificationService;
         _unitOfWork = unitOfWork;
     }
 
@@ -289,6 +293,9 @@ public sealed class SalesInvoicesController : ControllerBase
             customer.LoyaltyPoints += (int)(totalAmount / 100);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _notificationService.CheckAndNotifyLowStockAsync(
+                items.Where(i => i.PartId.HasValue).Select(i => i.PartId!.Value),
+                cancellationToken);
 
             // Reload for response
             var created = await _salesInvoiceRepository.Query()
