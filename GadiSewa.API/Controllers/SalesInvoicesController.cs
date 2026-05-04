@@ -2,32 +2,25 @@ using GadiSewa.Application.Common.Exceptions;
 using GadiSewa.Application.Common.Responses;
 using GadiSewa.Application.DTOs.SalesInvoices;
 using GadiSewa.Application.Interfaces.Persistence;
-using GadiSewa.Application.Interfaces.Services;
 using GadiSewa.Domain.Entities;
+using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
-using System.Text;
 
 namespace GadiSewa.API.Controllers;
 
 [ApiController]
 [Route("api/sales-invoices")]
-[Authorize]
 public sealed class SalesInvoicesController : ControllerBase
 {
-    private const decimal LoyaltyDiscountThreshold = 5000m;
-    private const decimal LoyaltyDiscountRate = 0.10m;
-
     private readonly IRepository<SalesInvoice> _salesInvoiceRepository;
     private readonly IRepository<SalesInvoiceItem> _salesInvoiceItemRepository;
     private readonly IRepository<Customer> _customerRepository;
     private readonly IRepository<Part> _partRepository;
-    private readonly IRepository<Staff> _staffRepository;
     private readonly IRepository<Appointment> _appointmentRepository;
-    private readonly IEmailService _emailService;
+    private readonly IRepository<CreditPayment> _creditPaymentRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public SalesInvoicesController(
@@ -35,521 +28,311 @@ public sealed class SalesInvoicesController : ControllerBase
         IRepository<SalesInvoiceItem> salesInvoiceItemRepository,
         IRepository<Customer> customerRepository,
         IRepository<Part> partRepository,
-        IRepository<Staff> staffRepository,
         IRepository<Appointment> appointmentRepository,
-        IEmailService emailService,
+        IRepository<CreditPayment> creditPaymentRepository,
         IUnitOfWork unitOfWork)
     {
         _salesInvoiceRepository = salesInvoiceRepository;
         _salesInvoiceItemRepository = salesInvoiceItemRepository;
         _customerRepository = customerRepository;
         _partRepository = partRepository;
-        _staffRepository = staffRepository;
         _appointmentRepository = appointmentRepository;
-        _emailService = emailService;
+        _creditPaymentRepository = creditPaymentRepository;
         _unitOfWork = unitOfWork;
-    }
-
-    [HttpGet]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<SalesInvoiceDto>>>> GetAll(CancellationToken cancellationToken)
-    {
-        var invoices = await _salesInvoiceRepository.Query()
-            .AsNoTracking()
-            .Include(i => i.Customer)
-                .ThenInclude(c => c.User)
-            .Include(i => i.CreatedByStaff)
-                .ThenInclude(s => s.User)
-            .Include(i => i.Items)
-                .ThenInclude(it => it.Part)
-            .OrderByDescending(i => i.InvoiceDate)
-            .ToListAsync(cancellationToken);
-
-        var result = invoices.Select(MapToDto).ToList();
-        return Ok(ApiResponse<IReadOnlyList<SalesInvoiceDto>>.Success(result));
-    }
-
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<ApiResponse<SalesInvoiceDto>>> GetById(Guid id, CancellationToken cancellationToken)
-    {
-        var invoice = await _salesInvoiceRepository.Query()
-            .AsNoTracking()
-            .Where(i => i.Id == id)
-            .Include(i => i.Customer)
-                .ThenInclude(c => c.User)
-            .Include(i => i.CreatedByStaff)
-                .ThenInclude(s => s.User)
-            .Include(i => i.Items)
-                .ThenInclude(it => it.Part)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (invoice is null)
-        {
-            return NotFound(ApiResponse<SalesInvoiceDto>.Failure("Sales invoice not found.", StatusCodes.Status404NotFound));
-        }
-
-        return Ok(ApiResponse<SalesInvoiceDto>.Success(MapToDto(invoice)));
-    }
-
-    [HttpGet("overdue")]
-    [Authorize(Policy = "BackOfficeOnly")]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<SalesInvoiceDto>>>> GetOverdueInvoices(CancellationToken cancellationToken)
-    {
-        var cutoff = DateTimeOffset.UtcNow.AddMonths(-1);
-
-        var invoices = await _salesInvoiceRepository.Query()
-            .AsNoTracking()
-            .Where(i => i.AmountDue > 0 && i.DueDate.HasValue && i.DueDate.Value < cutoff)
-            .Include(i => i.Customer)
-                .ThenInclude(c => c.User)
-            .Include(i => i.CreatedByStaff)
-                .ThenInclude(s => s.User)
-            .Include(i => i.Items)
-                .ThenInclude(it => it.Part)
-            .OrderByDescending(i => i.DueDate)
-            .ToListAsync(cancellationToken);
-
-        return Ok(ApiResponse<IReadOnlyList<SalesInvoiceDto>>.Success(invoices.Select(MapToDto).ToList()));
-    }
-
-    [HttpPost]
-    [Authorize(Policy = "AdminOnly")]
-    public async Task<ActionResult<ApiResponse<SalesInvoiceDto>>> Create(
-        [FromBody] CreateSalesInvoiceRequestDto request,
-        CancellationToken cancellationToken)
-    {
-        if (request.Items is null || request.Items.Count == 0)
-        {
-            return BadRequest(ApiResponse<SalesInvoiceDto>.Failure("At least one invoice item is required.", StatusCodes.Status400BadRequest));
-        }
-
-        var customer = await _customerRepository.Query()
-            .Include(c => c.User)
-            .FirstOrDefaultAsync(c => c.Id == request.CustomerId, cancellationToken);
-
-        if (customer is null)
-        {
-            return NotFound(ApiResponse<SalesInvoiceDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
-        }
-
-        if (request.AppointmentId.HasValue)
-        {
-            var appointment = await _appointmentRepository.GetByIdAsync(request.AppointmentId.Value, cancellationToken);
-            if (appointment is null)
-            {
-                return NotFound(ApiResponse<SalesInvoiceDto>.Failure("Appointment not found.", StatusCodes.Status404NotFound));
-            }
-        }
-
-        var staff = await ResolveCurrentStaffAsync(cancellationToken);
-
-        var partIds = request.Items.Where(i => i.PartId.HasValue).Select(i => i.PartId!.Value).Distinct().ToList();
-        var parts = await _partRepository.Query().Where(p => partIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
-
-        if (parts.Count != partIds.Count)
-        {
-            return NotFound(ApiResponse<SalesInvoiceDto>.Failure("One or more parts were not found.", StatusCodes.Status404NotFound));
-        }
-
-        // Validate stock before completing sale.
-        foreach (var item in request.Items.Where(i => i.PartId.HasValue))
-        {
-            var part = parts[item.PartId!.Value];
-            if (part.StockQuantity < item.Quantity)
-            {
-                return BadRequest(ApiResponse<SalesInvoiceDto>.Failure($"Insufficient stock for part {part.PartNumber}. Available: {part.StockQuantity}, required: {item.Quantity}.", StatusCodes.Status400BadRequest));
-            }
-        }
-
-        var subTotal = request.Items.Sum(i => i.Quantity * i.UnitPrice);
-        var loyaltyApplied = subTotal > LoyaltyDiscountThreshold;
-        var discountAmount = loyaltyApplied ? Math.Round(subTotal * LoyaltyDiscountRate, 2, MidpointRounding.AwayFromZero) : 0m;
-        var taxableAmount = subTotal - discountAmount;
-        var taxAmount = Math.Round(taxableAmount * (request.TaxRatePercent / 100m), 2, MidpointRounding.AwayFromZero);
-        var totalAmount = taxableAmount + taxAmount;
-
-        var invoice = new SalesInvoice
-        {
-            InvoiceNumber = await GenerateInvoiceNumberAsync(cancellationToken),
-            CustomerId = customer.Id,
-            CreatedByStaffId = staff.Id,
-            AppointmentId = request.AppointmentId,
-            InvoiceDate = request.InvoiceDate,
-            DueDate = request.DueDate,
-            SubTotal = subTotal,
-            DiscountAmount = discountAmount,
-            LoyaltyApplied = loyaltyApplied,
-            TaxAmount = taxAmount,
-            TotalAmount = totalAmount,
-            AmountPaid = 0m,
-            AmountDue = totalAmount,
-            Status = request.Status
-        };
-
-        await _salesInvoiceRepository.AddAsync(invoice, cancellationToken);
-
-        foreach (var item in request.Items)
-        {
-            var lineTotal = item.Quantity * item.UnitPrice;
-            await _salesInvoiceItemRepository.AddAsync(new SalesInvoiceItem
-            {
-                SalesInvoiceId = invoice.Id,
-                PartId = item.PartId,
-                Description = item.Description.Trim(),
-                Quantity = item.Quantity,
-                UnitPrice = item.UnitPrice,
-                LineTotal = lineTotal
-            }, cancellationToken);
-
-            if (item.PartId.HasValue)
-            {
-                var part = parts[item.PartId.Value];
-                part.StockQuantity -= item.Quantity;
-                part.UpdatedAt = DateTimeOffset.UtcNow;
-                _partRepository.Update(part);
-            }
-        }
-
-        customer.TotalSpent += totalAmount;
-        customer.UpdatedAt = DateTimeOffset.UtcNow;
-        _customerRepository.Update(customer);
-
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        var created = await LoadInvoiceAsync(invoice.Id, cancellationToken);
-        return StatusCode(StatusCodes.Status201Created, ApiResponse<SalesInvoiceDto>.Success(MapToDto(created!), StatusCodes.Status201Created));
-    }
-
-    [HttpPut("{id:guid}")]
-    [Authorize(Policy = "AdminOnly")]
-    public async Task<ActionResult<ApiResponse<SalesInvoiceDto>>> Update(
-        Guid id,
-        [FromBody] UpdateSalesInvoiceRequestDto request,
-        CancellationToken cancellationToken)
-    {
-        var invoice = await _salesInvoiceRepository.Query()
-            .Include(i => i.Items)
-            .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
-
-        if (invoice is null)
-        {
-            return NotFound(ApiResponse<SalesInvoiceDto>.Failure("Sales invoice not found.", StatusCodes.Status404NotFound));
-        }
-
-        var customer = await _customerRepository.Query()
-            .Include(c => c.User)
-            .FirstOrDefaultAsync(c => c.Id == request.CustomerId, cancellationToken);
-
-        if (customer is null)
-        {
-            return NotFound(ApiResponse<SalesInvoiceDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
-        }
-
-        if (request.AppointmentId.HasValue)
-        {
-            var appointment = await _appointmentRepository.GetByIdAsync(request.AppointmentId.Value, cancellationToken);
-            if (appointment is null)
-            {
-                return NotFound(ApiResponse<SalesInvoiceDto>.Failure("Appointment not found.", StatusCodes.Status404NotFound));
-            }
-        }
-
-        var partIds = request.Items.Where(i => i.PartId.HasValue).Select(i => i.PartId!.Value).Distinct().ToList();
-        var parts = await _partRepository.Query().Where(p => partIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
-
-        if (parts.Count != partIds.Count)
-        {
-            return NotFound(ApiResponse<SalesInvoiceDto>.Failure("One or more parts were not found.", StatusCodes.Status404NotFound));
-        }
-
-        // Revert old stock movements before re-applying the new ones.
-        var existingPartItems = invoice.Items.Where(i => i.PartId.HasValue).ToList();
-        if (existingPartItems.Count > 0)
-        {
-            var existingPartIds = existingPartItems.Select(i => i.PartId!.Value).Distinct().ToList();
-            var existingParts = await _partRepository.Query().Where(p => existingPartIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
-
-            foreach (var oldItem in existingPartItems)
-            {
-                var part = existingParts[oldItem.PartId!.Value];
-                part.StockQuantity += oldItem.Quantity;
-                part.UpdatedAt = DateTimeOffset.UtcNow;
-                _partRepository.Update(part);
-            }
-        }
-
-        foreach (var newItem in request.Items.Where(i => i.PartId.HasValue))
-        {
-            var part = parts[newItem.PartId!.Value];
-            if (part.StockQuantity < newItem.Quantity)
-            {
-                return BadRequest(ApiResponse<SalesInvoiceDto>.Failure($"Insufficient stock for part {part.PartNumber}. Available: {part.StockQuantity}, required: {newItem.Quantity}.", StatusCodes.Status400BadRequest));
-            }
-        }
-
-        var oldTotalAmount = invoice.TotalAmount;
-
-        var subTotal = request.Items.Sum(i => i.Quantity * i.UnitPrice);
-        var loyaltyApplied = subTotal > LoyaltyDiscountThreshold;
-        var discountAmount = loyaltyApplied ? Math.Round(subTotal * LoyaltyDiscountRate, 2, MidpointRounding.AwayFromZero) : 0m;
-        var taxableAmount = subTotal - discountAmount;
-        var taxAmount = Math.Round(taxableAmount * (request.TaxRatePercent / 100m), 2, MidpointRounding.AwayFromZero);
-        var totalAmount = taxableAmount + taxAmount;
-
-        foreach (var existing in invoice.Items.ToList())
-        {
-            _salesInvoiceItemRepository.Remove(existing);
-        }
-
-        foreach (var item in request.Items)
-        {
-            await _salesInvoiceItemRepository.AddAsync(new SalesInvoiceItem
-            {
-                SalesInvoiceId = invoice.Id,
-                PartId = item.PartId,
-                Description = item.Description.Trim(),
-                Quantity = item.Quantity,
-                UnitPrice = item.UnitPrice,
-                LineTotal = item.Quantity * item.UnitPrice
-            }, cancellationToken);
-
-            if (item.PartId.HasValue)
-            {
-                var part = parts[item.PartId.Value];
-                part.StockQuantity -= item.Quantity;
-                part.UpdatedAt = DateTimeOffset.UtcNow;
-                _partRepository.Update(part);
-            }
-        }
-
-        invoice.CustomerId = customer.Id;
-        invoice.AppointmentId = request.AppointmentId;
-        invoice.InvoiceDate = request.InvoiceDate;
-        invoice.DueDate = request.DueDate;
-        invoice.SubTotal = subTotal;
-        invoice.DiscountAmount = discountAmount;
-        invoice.LoyaltyApplied = loyaltyApplied;
-        invoice.TaxAmount = taxAmount;
-        invoice.TotalAmount = totalAmount;
-        invoice.AmountDue = Math.Max(totalAmount - invoice.AmountPaid, 0m);
-        invoice.Status = request.Status;
-        invoice.UpdatedAt = DateTimeOffset.UtcNow;
-
-        _salesInvoiceRepository.Update(invoice);
-
-        customer.TotalSpent = customer.TotalSpent - oldTotalAmount + totalAmount;
-        if (customer.TotalSpent < 0) customer.TotalSpent = 0;
-        customer.UpdatedAt = DateTimeOffset.UtcNow;
-        _customerRepository.Update(customer);
-
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        var updated = await LoadInvoiceAsync(invoice.Id, cancellationToken);
-        return Ok(ApiResponse<SalesInvoiceDto>.Success(MapToDto(updated!)));
-    }
-
-    [HttpDelete("{id:guid}")]
-    [Authorize(Policy = "AdminOnly")]
-    public async Task<ActionResult<ApiResponse<object?>>> Delete(Guid id, CancellationToken cancellationToken)
-    {
-        var invoice = await _salesInvoiceRepository.Query()
-            .Include(i => i.Items)
-            .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
-
-        if (invoice is null)
-        {
-            return NotFound(ApiResponse<object?>.Failure("Sales invoice not found.", StatusCodes.Status404NotFound));
-        }
-
-        // Revert stock because sale is being deleted.
-        var partItems = invoice.Items.Where(i => i.PartId.HasValue).ToList();
-        if (partItems.Count > 0)
-        {
-            var partIds = partItems.Select(i => i.PartId!.Value).Distinct().ToList();
-            var parts = await _partRepository.Query().Where(p => partIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
-
-            foreach (var item in partItems)
-            {
-                var part = parts[item.PartId!.Value];
-                part.StockQuantity += item.Quantity;
-                part.UpdatedAt = DateTimeOffset.UtcNow;
-                _partRepository.Update(part);
-            }
-        }
-
-        var customer = await _customerRepository.GetByIdAsync(invoice.CustomerId, cancellationToken);
-        if (customer is not null)
-        {
-            customer.TotalSpent -= invoice.TotalAmount;
-            if (customer.TotalSpent < 0) customer.TotalSpent = 0;
-            customer.UpdatedAt = DateTimeOffset.UtcNow;
-            _customerRepository.Update(customer);
-        }
-
-        _salesInvoiceRepository.Remove(invoice);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return Ok(ApiResponse<object?>.Success(null));
-    }
-
-    [HttpPost("{id:guid}/send-email")]
-    public async Task<ActionResult<ApiResponse<object?>>> SendInvoiceEmail(Guid id, CancellationToken cancellationToken)
-    {
-        var invoice = await _salesInvoiceRepository.Query()
-            .AsNoTracking()
-            .Where(i => i.Id == id)
-            .Include(i => i.Customer)
-                .ThenInclude(c => c.User)
-            .Include(i => i.CreatedByStaff)
-                .ThenInclude(s => s.User)
-            .Include(i => i.Items)
-                .ThenInclude(it => it.Part)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (invoice is null)
-        {
-            return NotFound(ApiResponse<object?>.Failure("Sales invoice not found.", StatusCodes.Status404NotFound));
-        }
-
-        var customerEmail = invoice.Customer.User.Email;
-        if (string.IsNullOrWhiteSpace(customerEmail))
-        {
-            return BadRequest(ApiResponse<object?>.Failure("Customer email is not available.", StatusCodes.Status400BadRequest));
-        }
-
-        var customerName = $"{invoice.Customer.User.FirstName} {invoice.Customer.User.LastName}".Trim();
-        var invoiceHtml = BuildInvoiceHtml(invoice);
-
-        await _emailService.SendSalesInvoiceEmailAsync(customerEmail, customerName, invoice.InvoiceNumber, invoiceHtml, cancellationToken);
-
-        return Ok(ApiResponse<object?>.Success(null));
-    }
-
-    private async Task<Staff> ResolveCurrentStaffAsync(CancellationToken cancellationToken)
-    {
-        var userId = GetCurrentUserId();
-        var staff = await _staffRepository.Query()
-            .Include(s => s.User)
-            .FirstOrDefaultAsync(s => s.UserId == userId, cancellationToken);
-
-        if (staff is null)
-        {
-            throw new ValidationException("Current user does not have a linked staff profile.");
-        }
-
-        return staff;
     }
 
     private Guid GetCurrentUserId()
     {
-        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("uid");
-        if (!Guid.TryParse(userIdValue, out var userId))
-        {
-            throw new UnauthorizedException("Invalid user identity.");
-        }
-
-        return userId;
+        return Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
     }
 
-    private async Task<string> GenerateInvoiceNumberAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Get sales invoices (staff can view all, customers view their own)
+    /// </summary>
+    [HttpGet]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<SalesInvoiceDto>>>> GetSalesInvoices(
+        [FromQuery] Guid? customerId,
+        [FromQuery] string? status,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
     {
-        var prefix = $"SINV-{DateTime.UtcNow:yyyyMMdd}-";
-
-        var latest = await _salesInvoiceRepository.Query()
-            .Where(i => i.InvoiceNumber.StartsWith(prefix))
-            .OrderByDescending(i => i.InvoiceNumber)
-            .Select(i => i.InvoiceNumber)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var nextSequence = 1;
-        if (!string.IsNullOrWhiteSpace(latest))
+        try
         {
-            var suffix = latest[prefix.Length..];
-            if (int.TryParse(suffix, out var parsed))
-            {
-                nextSequence = parsed + 1;
-            }
-        }
+            if (pageNumber < 1) pageNumber = 1;
+            if (pageSize < 1 || pageSize > 100) pageSize = 20;
 
-        return $"{prefix}{nextSequence:D4}";
-    }
+            var userId = GetCurrentUserId();
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
 
-    private async Task<SalesInvoice?> LoadInvoiceAsync(Guid id, CancellationToken cancellationToken)
-    {
-        return await _salesInvoiceRepository.Query()
-            .AsNoTracking()
-            .Where(i => i.Id == id)
-            .Include(i => i.Customer)
+            IQueryable<SalesInvoice> query = _salesInvoiceRepository.Query()
+                .AsNoTracking()
+                .Include(si => si.Customer)
                 .ThenInclude(c => c.User)
-            .Include(i => i.CreatedByStaff)
+                .Include(si => si.CreatedByStaff)
                 .ThenInclude(s => s.User)
-            .Include(i => i.Items)
-                .ThenInclude(it => it.Part)
-            .FirstOrDefaultAsync(cancellationToken);
-    }
+                .Include(si => si.Items);
 
-    private static SalesInvoiceDto MapToDto(SalesInvoice invoice)
-    {
-        return new SalesInvoiceDto
-        {
-            SalesInvoiceId = invoice.Id,
-            InvoiceNumber = invoice.InvoiceNumber,
-            CustomerId = invoice.CustomerId,
-            CustomerName = invoice.Customer is null ? string.Empty : $"{invoice.Customer.User.FirstName} {invoice.Customer.User.LastName}".Trim(),
-            CustomerEmail = invoice.Customer?.User.Email ?? string.Empty,
-            CreatedByStaffId = invoice.CreatedByStaffId,
-            CreatedByStaffName = invoice.CreatedByStaff is null ? string.Empty : $"{invoice.CreatedByStaff.User.FirstName} {invoice.CreatedByStaff.User.LastName}".Trim(),
-            AppointmentId = invoice.AppointmentId,
-            InvoiceDate = invoice.InvoiceDate,
-            DueDate = invoice.DueDate,
-            SubTotal = invoice.SubTotal,
-            DiscountAmount = invoice.DiscountAmount,
-            LoyaltyApplied = invoice.LoyaltyApplied,
-            TaxAmount = invoice.TaxAmount,
-            TotalAmount = invoice.TotalAmount,
-            AmountPaid = invoice.AmountPaid,
-            AmountDue = invoice.AmountDue,
-            Status = invoice.Status.ToString(),
-            Items = invoice.Items.Select(it => new SalesInvoiceItemDto
+            // If customer, only show their own invoices
+            if (userRole != "Admin" && userRole != "Staff")
             {
-                SalesInvoiceItemId = it.Id,
-                PartId = it.PartId,
-                PartName = it.Part?.Name ?? string.Empty,
-                PartNumber = it.Part?.PartNumber ?? string.Empty,
-                Description = it.Description,
-                Quantity = it.Quantity,
-                UnitPrice = it.UnitPrice,
-                LineTotal = it.LineTotal
-            }).ToList()
-        };
+                var customer = await _customerRepository.Query()
+                    .Where(c => c.UserId == userId)
+                    .Select(c => c.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (customer == Guid.Empty)
+                {
+                    return Ok(ApiResponse<IReadOnlyList<SalesInvoiceDto>>.Success([]));
+                }
+
+                query = query.Where(si => si.CustomerId == customer);
+            }
+            else if (customerId.HasValue && customerId != Guid.Empty)
+            {
+                query = query.Where(si => si.CustomerId == customerId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                if (Enum.TryParse<InvoiceStatus>(status, true, out var statusEnum))
+                {
+                    query = query.Where(si => si.Status == statusEnum);
+                }
+            }
+
+            var invoices = await query
+                .OrderByDescending(si => si.InvoiceDate)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync(cancellationToken);
+
+            var dtos = invoices.Select(si => SalesInvoiceDto.FromEntity(
+                si,
+                si.Items.Select(SalesInvoiceItemDto.FromEntity),
+                si.DiscountAmount > 0
+            )).ToList();
+
+            return Ok(ApiResponse<IReadOnlyList<SalesInvoiceDto>>.Success(dtos));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<IReadOnlyList<SalesInvoiceDto>>.Failure(
+                    $"Error retrieving sales invoices: {ex.Message}",
+                    StatusCodes.Status500InternalServerError));
+        }
     }
 
-    private static string BuildInvoiceHtml(SalesInvoice invoice)
+    /// <summary>
+    /// Get sales invoice details
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<SalesInvoiceDto>>> GetSalesInvoice(
+        Guid id,
+        CancellationToken cancellationToken)
     {
-        var sb = new StringBuilder();
-        var customerName = invoice.Customer is null ? "Customer" : $"{invoice.Customer.User.FirstName} {invoice.Customer.User.LastName}".Trim();
-        var staffName = invoice.CreatedByStaff is null ? string.Empty : $"{invoice.CreatedByStaff.User.FirstName} {invoice.CreatedByStaff.User.LastName}".Trim();
-
-        sb.AppendLine("<html><body style='font-family:Segoe UI,Arial,sans-serif;'>");
-        sb.AppendLine($"<h2>Invoice {invoice.InvoiceNumber}</h2>");
-        sb.AppendLine($"<p><strong>Date:</strong> {invoice.InvoiceDate:yyyy-MM-dd}</p>");
-        sb.AppendLine($"<p><strong>Customer:</strong> {customerName}</p>");
-        sb.AppendLine($"<p><strong>Prepared By:</strong> {staffName}</p>");
-        sb.AppendLine("<table border='1' cellpadding='6' cellspacing='0' style='border-collapse:collapse;width:100%;'>");
-        sb.AppendLine("<thead><tr><th>Description</th><th>Part No</th><th>Qty</th><th>Unit Price</th><th>Line Total</th></tr></thead><tbody>");
-
-        foreach (var item in invoice.Items)
+        try
         {
-            sb.AppendLine($"<tr><td>{System.Net.WebUtility.HtmlEncode(item.Description)}</td><td>{System.Net.WebUtility.HtmlEncode(item.Part?.PartNumber ?? string.Empty)}</td><td>{item.Quantity}</td><td>{item.UnitPrice:N2}</td><td>{item.LineTotal:N2}</td></tr>");
+            var userId = GetCurrentUserId();
+            var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+
+            var invoice = await _salesInvoiceRepository.Query()
+                .AsNoTracking()
+                .Where(si => si.Id == id)
+                .Include(si => si.Customer)
+                .ThenInclude(c => c.User)
+                .Include(si => si.CreatedByStaff)
+                .ThenInclude(s => s.User)
+                .Include(si => si.Items)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (invoice is null)
+            {
+                return NotFound(ApiResponse<SalesInvoiceDto>.Failure(
+                    "Sales invoice not found.",
+                    StatusCodes.Status404NotFound));
+            }
+
+            // Check authorization
+            if (userRole != "Admin" && userRole != "Staff")
+            {
+                var customer = await _customerRepository.Query()
+                    .Where(c => c.UserId == userId)
+                    .Select(c => c.Id)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                if (customer != invoice.CustomerId)
+                {
+                    return Forbid();
+                }
+            }
+
+            var dto = SalesInvoiceDto.FromEntity(
+                invoice,
+                invoice.Items.Select(SalesInvoiceItemDto.FromEntity),
+                invoice.DiscountAmount > 0
+            );
+
+            return Ok(ApiResponse<SalesInvoiceDto>.Success(dto));
         }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<SalesInvoiceDto>.Failure(
+                    $"Error retrieving sales invoice: {ex.Message}",
+                    StatusCodes.Status500InternalServerError));
+        }
+    }
 
-        sb.AppendLine("</tbody></table>");
-        sb.AppendLine($"<p><strong>SubTotal:</strong> {invoice.SubTotal:N2}</p>");
-        sb.AppendLine($"<p><strong>Discount:</strong> {invoice.DiscountAmount:N2} {(invoice.LoyaltyApplied ? "(Loyalty Applied)" : string.Empty)}</p>");
-        sb.AppendLine($"<p><strong>Tax:</strong> {invoice.TaxAmount:N2}</p>");
-        sb.AppendLine($"<p><strong>Total:</strong> {invoice.TotalAmount:N2}</p>");
-        sb.AppendLine($"<p><strong>Amount Due:</strong> {invoice.AmountDue:N2}</p>");
-        sb.AppendLine("</body></html>");
+    /// <summary>
+    /// Create sales invoice with automatic 10% loyalty discount if subtotal > 5000
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<ActionResult<ApiResponse<SalesInvoiceDto>>> CreateSalesInvoice(
+        [FromBody] CreateSalesInvoiceRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var customer = await _customerRepository.Query()
+                .Where(c => c.Id == request.CustomerId)
+                .Include(c => c.User)
+                .FirstOrDefaultAsync(cancellationToken);
 
-        return sb.ToString();
+            if (customer is null)
+            {
+                throw new NotFoundException("Customer not found.");
+            }
+
+            // Validate parts if part-based items
+            var partIds = request.Items
+                .Where(i => i.PartId.HasValue)
+                .Select(i => i.PartId.Value)
+                .Distinct()
+                .ToList();
+
+            var parts = partIds.Count > 0
+                ? await _partRepository.Query()
+                    .Where(p => partIds.Contains(p.Id))
+                    .ToListAsync(cancellationToken)
+                : [];
+
+            if (parts.Count != partIds.Count)
+            {
+                throw new NotFoundException("One or more parts not found.");
+            }
+
+            // Validate stock availability
+            foreach (var item in request.Items.Where(i => i.PartId.HasValue))
+            {
+                var part = parts.First(p => p.Id == item.PartId);
+                if (part.StockQuantity < item.Quantity)
+                {
+                    throw new ConflictException(
+                        $"Insufficient stock for part {part.PartNumber}. Available: {part.StockQuantity}, Requested: {item.Quantity}");
+                }
+            }
+
+            // Calculate subtotal
+            var subTotal = request.Items.Sum(i => i.Quantity * i.UnitPrice);
+
+            // Apply 10% loyalty discount if subtotal > 5000
+            var discountAmount = subTotal > 5000 ? subTotal * 0.1m : 0;
+            var totalBeforeTax = subTotal - discountAmount;
+            var totalAmount = totalBeforeTax + request.TaxAmount;
+
+            var invoiceNumber = $"SAL-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8].ToUpper()}";
+
+            var invoice = new SalesInvoice
+            {
+                InvoiceNumber = invoiceNumber,
+                CustomerId = request.CustomerId,
+                CreatedByStaffId = Guid.NewGuid(), // Placeholder - would use logged-in staff
+                AppointmentId = request.AppointmentId,
+                InvoiceDate = request.InvoiceDate,
+                DueDate = request.DueDate,
+                SubTotal = subTotal,
+                DiscountAmount = discountAmount,
+                TaxAmount = request.TaxAmount,
+                TotalAmount = totalAmount,
+                Status = InvoiceStatus.Unpaid
+            };
+
+            var items = request.Items.Select(i => new SalesInvoiceItem
+            {
+                PartId = i.PartId,
+                Description = i.Description,
+                Quantity = i.Quantity,
+                UnitPrice = i.UnitPrice,
+                LineTotal = i.Quantity * i.UnitPrice
+            }).ToList();
+
+            await _salesInvoiceRepository.AddAsync(invoice, cancellationToken);
+            foreach (var item in items)
+            {
+                item.SalesInvoice = invoice;
+                await _salesInvoiceItemRepository.AddAsync(item, cancellationToken);
+            }
+
+            // Deduct stock from parts
+            foreach (var item in items.Where(i => i.PartId.HasValue))
+            {
+                var part = parts.First(p => p.Id == item.PartId);
+                part.StockQuantity -= item.Quantity;
+            }
+
+            // Update loyalty points (add 1 point per 100 rupees spent)
+            customer.LoyaltyPoints += (int)(totalAmount / 100);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Reload for response
+            var created = await _salesInvoiceRepository.Query()
+                .AsNoTracking()
+                .Where(si => si.Id == invoice.Id)
+                .Include(si => si.Customer)
+                .ThenInclude(c => c.User)
+                .Include(si => si.CreatedByStaff)
+                .ThenInclude(s => s.User)
+                .Include(si => si.Items)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (created is null)
+            {
+                throw new Exception("Failed to reload created sales invoice.");
+            }
+
+            var dto = SalesInvoiceDto.FromEntity(
+                created,
+                created.Items.Select(SalesInvoiceItemDto.FromEntity),
+                discountAmount > 0
+            );
+
+            return StatusCode(StatusCodes.Status201Created,
+                ApiResponse<SalesInvoiceDto>.Success(dto, StatusCodes.Status201Created));
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(ApiResponse<SalesInvoiceDto>.Failure(
+                ex.Message,
+                StatusCodes.Status404NotFound));
+        }
+        catch (ConflictException ex)
+        {
+            return Conflict(ApiResponse<SalesInvoiceDto>.Failure(
+                ex.Message,
+                StatusCodes.Status409Conflict));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<SalesInvoiceDto>.Failure(
+                    $"Error creating sales invoice: {ex.Message}",
+                    StatusCodes.Status500InternalServerError));
+        }
     }
 }
