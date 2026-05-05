@@ -100,6 +100,9 @@ var app = builder.Build();
 
 app.UseCors("AllowReactApp");
 
+// Global exception handling middleware
+app.UseMiddleware<GadiSewa.API.Middleware.GlobalExceptionMiddleware>();
+
 // Only use HTTPS redirection in production
 if (!app.Environment.IsDevelopment())
 {
