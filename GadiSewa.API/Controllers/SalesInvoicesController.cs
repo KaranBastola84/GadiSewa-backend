@@ -1,4 +1,4 @@
-using GadiSewa.Application.Common.Exceptions;
+﻿using GadiSewa.Application.Common.Exceptions;
 using GadiSewa.Application.Common.Responses;
 using GadiSewa.Application.DTOs.SalesInvoices;
 using GadiSewa.Application.Interfaces.Persistence;
@@ -7,6 +7,8 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Net;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using GadiSewa.API.Extensions;
@@ -24,6 +26,7 @@ public sealed class SalesInvoicesController : ControllerBase
     private readonly IRepository<Appointment> _appointmentRepository;
     private readonly IRepository<CreditPayment> _creditPaymentRepository;
     private readonly IRepository<Staff> _staffRepository;
+    private readonly IEmailService _emailService;
     private readonly INotificationService _notificationService;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -35,6 +38,7 @@ public sealed class SalesInvoicesController : ControllerBase
         IRepository<Appointment> appointmentRepository,
         IRepository<CreditPayment> creditPaymentRepository,
         IRepository<Staff> staffRepository,
+        IEmailService emailService,
         INotificationService notificationService,
         IUnitOfWork unitOfWork)
     {
@@ -45,6 +49,7 @@ public sealed class SalesInvoicesController : ControllerBase
         _appointmentRepository = appointmentRepository;
         _creditPaymentRepository = creditPaymentRepository;
         _staffRepository = staffRepository;
+        _emailService = emailService;
         _notificationService = notificationService;
         _unitOfWork = unitOfWork;
     }
@@ -189,6 +194,68 @@ public sealed class SalesInvoicesController : ControllerBase
                 ApiResponse<SalesInvoiceDto>.Failure(
                     $"Error retrieving sales invoice: {ex.Message}",
                     StatusCodes.Status500InternalServerError));
+        }
+    }
+
+    /// <summary>
+    /// Send sales invoice email to the customer
+    /// </summary>
+    [HttpPost("{id:guid}/send-email")]
+    [Authorize(Policy = "StaffOnly")]
+    public async Task<ActionResult<ApiResponse<string>>> SendInvoiceEmail(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var invoice = await _salesInvoiceRepository.Query()
+                .AsNoTracking()
+                .Where(si => si.Id == id)
+                .Include(si => si.Customer)
+                    .ThenInclude(c => c.User)
+                .Include(si => si.Items)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (invoice is null)
+            {
+                return NotFound(ApiResponse<string>.Failure(
+                    "Sales invoice not found.",
+                    StatusCodes.Status404NotFound));
+            }
+
+            if (invoice.Customer?.User is null)
+            {
+                return NotFound(ApiResponse<string>.Failure(
+                    "Customer email not found.",
+                    StatusCodes.Status404NotFound));
+            }
+
+            var customerName = $"{invoice.Customer.User.FirstName} {invoice.Customer.User.LastName}".Trim();
+            var emailBody = BuildInvoiceEmailBody(invoice, customerName);
+
+            try
+            {
+                await _emailService.SendSalesInvoiceEmailAsync(
+                    invoice.Customer.User.Email,
+                    customerName,
+                    invoice.InvoiceNumber,
+                    emailBody,
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<string>.Failure(
+                    $"Error sending invoice email: {ex.Message}",
+                    StatusCodes.Status500InternalServerError));
+            }
+
+            return Ok(ApiResponse<string>.Success("Invoice sent successfully"));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<string>.Failure(
+                $"Error sending invoice email: {ex.Message}",
+                StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -350,5 +417,46 @@ public sealed class SalesInvoicesController : ControllerBase
                     $"Error creating sales invoice: {ex.Message}",
                     StatusCodes.Status500InternalServerError));
         }
+    }
+
+    private static string BuildInvoiceEmailBody(SalesInvoice invoice, string customerName)
+    {
+        var sb = new StringBuilder();
+        var invoiceDate = invoice.InvoiceDate.ToString("yyyy-MM-dd HH:mm");
+
+        sb.AppendLine("<html><body style=\"font-family: Arial, sans-serif; color: #222;\">");
+        sb.AppendLine($"<h2>Invoice {WebUtility.HtmlEncode(invoice.InvoiceNumber)}</h2>");
+        sb.AppendLine($"<p><strong>Customer:</strong> {WebUtility.HtmlEncode(customerName)}</p>");
+        sb.AppendLine($"<p><strong>Invoice Date:</strong> {WebUtility.HtmlEncode(invoiceDate)}</p>");
+        sb.AppendLine("<table style=\"width:100%; border-collapse: collapse; margin-top: 16px;\" border=\"1\" cellpadding=\"8\">");
+        sb.AppendLine("<thead><tr><th align=\"left\">Description</th><th align=\"right\">Qty</th><th align=\"right\">Unit Price</th><th align=\"right\">Line Total</th></tr></thead>");
+        sb.AppendLine("<tbody>");
+
+        foreach (var item in invoice.Items)
+        {
+            sb.AppendLine("<tr>");
+            sb.AppendLine($"<td>{WebUtility.HtmlEncode(item.Description)}</td>");
+            sb.AppendLine($"<td align=\"right\">{item.Quantity}</td>");
+            sb.AppendLine($"<td align=\"right\">{item.UnitPrice:F2}</td>");
+            sb.AppendLine($"<td align=\"right\">{item.LineTotal:F2}</td>");
+            sb.AppendLine("</tr>");
+        }
+
+        sb.AppendLine("</tbody></table>");
+        sb.AppendLine("<div style=\"margin-top: 16px;\">");
+        sb.AppendLine($"<p><strong>SubTotal:</strong> {invoice.SubTotal:F2}</p>");
+
+        if (invoice.DiscountAmount > 0)
+        {
+            sb.AppendLine($"<p><strong>Discount Amount:</strong> {invoice.DiscountAmount:F2}</p>");
+        }
+
+        sb.AppendLine($"<p><strong>Tax Amount:</strong> {invoice.TaxAmount:F2}</p>");
+        sb.AppendLine($"<p><strong>Total Amount:</strong> {invoice.TotalAmount:F2}</p>");
+        sb.AppendLine($"<p><strong>Amount Due:</strong> {invoice.AmountDue:F2}</p>");
+        sb.AppendLine("</div>");
+        sb.AppendLine("</body></html>");
+
+        return sb.ToString();
     }
 }
