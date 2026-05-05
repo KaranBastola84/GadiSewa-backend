@@ -161,7 +161,7 @@ public sealed class CreditPaymentsController : ControllerBase
 
     private Guid GetCurrentUserId()
     {
-        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("uid");
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(userIdValue, out var userId))
         {
             throw new InvalidOperationException("Invalid user identity.");
