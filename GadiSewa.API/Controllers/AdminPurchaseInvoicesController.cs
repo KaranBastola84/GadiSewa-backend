@@ -10,7 +10,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using GadiSewa.API.Extensions;
 using System.Security.Claims;
-using System.Security.Claims;
 
 namespace GadiSewa.API.Controllers;
 
