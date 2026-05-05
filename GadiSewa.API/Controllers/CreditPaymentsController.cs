@@ -6,7 +6,6 @@ using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Claims;
 
 namespace GadiSewa.API.Controllers;
 
@@ -17,18 +16,15 @@ public sealed class CreditPaymentsController : ControllerBase
 {
     private readonly IRepository<CreditPayment> _creditPaymentRepository;
     private readonly IRepository<SalesInvoice> _salesInvoiceRepository;
-    private readonly IRepository<Customer> _customerRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreditPaymentsController(
         IRepository<CreditPayment> creditPaymentRepository,
         IRepository<SalesInvoice> salesInvoiceRepository,
-        IRepository<Customer> customerRepository,
         IUnitOfWork unitOfWork)
     {
         _creditPaymentRepository = creditPaymentRepository;
         _salesInvoiceRepository = salesInvoiceRepository;
-        _customerRepository = customerRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -44,54 +40,6 @@ public sealed class CreditPaymentsController : ControllerBase
             .ToListAsync(cancellationToken);
 
         return Ok(ApiResponse<IReadOnlyList<CreditPaymentDto>>.Success(payments.Select(MapToDto).ToList()));
-    }
-
-    [HttpGet("customer/{customerId:guid}")]
-    [Authorize]
-    public async Task<ActionResult<ApiResponse<CustomerCreditHistoryDto>>> GetCustomerCreditHistory(Guid customerId, CancellationToken cancellationToken)
-    {
-        var role = GetCurrentRole();
-        if (role == UserRole.Customer.ToString())
-        {
-            var currentCustomer = await _customerRepository.Query().FirstOrDefaultAsync(c => c.UserId == GetCurrentUserId(), cancellationToken);
-            if (currentCustomer is null || currentCustomer.Id != customerId)
-            {
-                return Forbid();
-            }
-        }
-
-        var customer = await _customerRepository.Query()
-            .AsNoTracking()
-            .Include(c => c.User)
-            .FirstOrDefaultAsync(c => c.Id == customerId, cancellationToken);
-
-        if (customer is null)
-        {
-            return NotFound(ApiResponse<CustomerCreditHistoryDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
-        }
-
-        var payments = await _creditPaymentRepository.Query()
-            .AsNoTracking()
-            .Where(p => p.CustomerId == customerId)
-            .Include(p => p.SalesInvoice)
-            .OrderByDescending(p => p.PaymentDate)
-            .ToListAsync(cancellationToken);
-
-        var totalOutstanding = await _salesInvoiceRepository.Query()
-            .AsNoTracking()
-            .Where(i => i.CustomerId == customerId)
-            .SumAsync(i => i.AmountDue, cancellationToken);
-
-        var dto = new CustomerCreditHistoryDto
-        {
-            CustomerId = customer.Id,
-            CustomerName = $"{customer.User.FirstName} {customer.User.LastName}".Trim(),
-            TotalPaid = payments.Sum(p => p.Amount),
-            TotalOutstanding = totalOutstanding,
-            Payments = payments.Select(MapToDto).ToList()
-        };
-
-        return Ok(ApiResponse<CustomerCreditHistoryDto>.Success(dto));
     }
 
     [HttpPost]
@@ -157,22 +105,6 @@ public sealed class CreditPaymentsController : ControllerBase
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return StatusCode(StatusCodes.Status201Created, ApiResponse<CreditPaymentDto>.Success(MapToDto(payment), StatusCodes.Status201Created));
-    }
-
-    private Guid GetCurrentUserId()
-    {
-        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(userIdValue, out var userId))
-        {
-            throw new InvalidOperationException("Invalid user identity.");
-        }
-
-        return userId;
-    }
-
-    private string GetCurrentRole()
-    {
-        return User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
     }
 
     private static CreditPaymentDto MapToDto(CreditPayment payment)

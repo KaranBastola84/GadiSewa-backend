@@ -1,5 +1,6 @@
 using GadiSewa.Application.Common.Exceptions;
 using GadiSewa.Application.Common.Responses;
+using GadiSewa.Application.DTOs.CreditPayments;
 using GadiSewa.Application.DTOs.Customers;
 using GadiSewa.Application.Interfaces.Persistence;
 using GadiSewa.Application.Interfaces.Services;
@@ -21,6 +22,7 @@ public sealed class CustomersController : ControllerBase
     private readonly IRepository<Customer> _customerRepository;
     private readonly IRepository<Vehicle> _vehicleRepository;
     private readonly IRepository<SalesInvoice> _invoiceRepository;
+    private readonly IRepository<CreditPayment> _creditPaymentRepository;
     private readonly IRepository<Appointment> _appointmentRepository;
     private readonly IPasswordHasherService _passwordHasherService;
     private readonly IEmailService _emailService;
@@ -31,6 +33,7 @@ public sealed class CustomersController : ControllerBase
         IRepository<Customer> customerRepository,
         IRepository<Vehicle> vehicleRepository,
         IRepository<SalesInvoice> invoiceRepository,
+        IRepository<CreditPayment> creditPaymentRepository,
         IRepository<Appointment> appointmentRepository,
         IPasswordHasherService passwordHasherService,
         IEmailService emailService,
@@ -40,6 +43,7 @@ public sealed class CustomersController : ControllerBase
         _customerRepository = customerRepository;
         _vehicleRepository = vehicleRepository;
         _invoiceRepository = invoiceRepository;
+        _creditPaymentRepository = creditPaymentRepository;
         _appointmentRepository = appointmentRepository;
         _passwordHasherService = passwordHasherService;
         _emailService = emailService;
@@ -597,5 +601,76 @@ public sealed class CustomersController : ControllerBase
         };
 
         return Ok(ApiResponse<CustomerHistorySummaryDto>.Success(dto));
+    }
+
+    [HttpGet("{id:guid}/credit-history")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<CustomerCreditHistoryDto>>> GetCustomerCreditHistory(Guid id, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (userRole != UserRole.Admin.ToString() && userRole != UserRole.Staff.ToString())
+        {
+            var currentCustomerId = await _customerRepository.Query()
+                .Where(c => c.UserId == userId)
+                .Select(c => c.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (currentCustomerId == Guid.Empty || currentCustomerId != id)
+            {
+                return Forbid();
+            }
+        }
+
+        var customer = await _customerRepository.Query()
+            .AsNoTracking()
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+
+        if (customer is null)
+        {
+            return NotFound(ApiResponse<CustomerCreditHistoryDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
+        }
+
+        var payments = await _creditPaymentRepository.Query()
+            .AsNoTracking()
+            .Where(p => p.CustomerId == id)
+            .Include(p => p.SalesInvoice)
+            .Include(p => p.Customer)
+            .ThenInclude(c => c.User)
+            .OrderByDescending(p => p.PaymentDate)
+            .ToListAsync(cancellationToken);
+
+        var totalOutstanding = await _invoiceRepository.Query()
+            .AsNoTracking()
+            .Where(i => i.CustomerId == id)
+            .SumAsync(i => i.AmountDue, cancellationToken);
+
+        var dto = new CustomerCreditHistoryDto
+        {
+            CustomerId = customer.Id,
+            CustomerName = customer.User is null ? string.Empty : $"{customer.User.FirstName} {customer.User.LastName}".Trim(),
+            TotalPaid = payments.Sum(p => p.Amount),
+            TotalOutstanding = totalOutstanding,
+            Payments = payments.Select(p => new CreditPaymentDto
+            {
+                CreditPaymentId = p.Id,
+                SalesInvoiceId = p.SalesInvoiceId,
+                InvoiceNumber = p.SalesInvoice?.InvoiceNumber ?? string.Empty,
+                CustomerId = p.CustomerId,
+                CustomerName = p.Customer?.User is null ? string.Empty : $"{p.Customer.User.FirstName} {p.Customer.User.LastName}".Trim(),
+                Amount = p.Amount,
+                AmountBeforePayment = p.AmountBeforePayment,
+                AmountAfterPayment = p.AmountAfterPayment,
+                PaymentDate = p.PaymentDate,
+                PaymentMethod = p.PaymentMethod,
+                ReferenceNumber = p.ReferenceNumber,
+                IsVerified = p.IsVerified,
+                Notes = p.Notes
+            }).ToList()
+        };
+
+        return Ok(ApiResponse<CustomerCreditHistoryDto>.Success(dto));
     }
 }
