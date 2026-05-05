@@ -8,6 +8,8 @@ using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using GadiSewa.API.Extensions;
+using System.Security.Claims;
 using System.Security.Claims;
 
 namespace GadiSewa.API.Controllers;
@@ -43,16 +45,7 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         _unitOfWork = unitOfWork;
     }
 
-    private Guid GetCurrentUserId()
-    {
-        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (!Guid.TryParse(userIdValue, out var userId))
-        {
-            throw new UnauthorizedException("Invalid user identity.");
-        }
 
-        return userId;
-    }
 
     /// <summary>
     /// Get all purchase invoices with optional filtering
@@ -190,17 +183,12 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
 
             var invoiceNumber = $"PUR-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8].ToUpper()}";
 
-            var userId = GetCurrentUserId();
-            var staffId = await _staffRepository.Query()
-                .Where(s => s.UserId == userId)
-                .Select(s => s.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
+            var userId = User.GetUserId();
+            var staffId = await User.GetStaffIdAsync(_staffRepository, cancellationToken);
             if (staffId == Guid.Empty)
             {
-                throw new NotFoundException("Staff profile not found.");
+                return NotFound(ApiResponse<PurchaseInvoiceDto>.Failure("Staff profile not found.", StatusCodes.Status404NotFound));
             }
-
             var invoice = new PurchaseInvoice
             {
                 InvoiceNumber = invoiceNumber,

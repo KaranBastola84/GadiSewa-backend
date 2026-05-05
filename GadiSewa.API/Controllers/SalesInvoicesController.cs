@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using GadiSewa.API.Extensions;
 
 namespace GadiSewa.API.Controllers;
 
@@ -48,10 +49,7 @@ public sealed class SalesInvoicesController : ControllerBase
         _unitOfWork = unitOfWork;
     }
 
-    private Guid GetCurrentUserId()
-    {
-        return Guid.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Guid.Empty.ToString());
-    }
+
 
     /// <summary>
     /// Get sales invoices (staff can view all, customers view their own)
@@ -70,7 +68,7 @@ public sealed class SalesInvoicesController : ControllerBase
             if (pageNumber < 1) pageNumber = 1;
             if (pageSize < 1 || pageSize > 100) pageSize = 20;
 
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
 
             IQueryable<SalesInvoice> query = _salesInvoiceRepository.Query()
@@ -143,7 +141,7 @@ public sealed class SalesInvoicesController : ControllerBase
     {
         try
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
 
             var invoice = await _salesInvoiceRepository.Query()
@@ -254,15 +252,12 @@ public sealed class SalesInvoicesController : ControllerBase
 
             var invoiceNumber = $"SAL-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8].ToUpper()}";
 
-            var userId = GetCurrentUserId();
-            var staffId = await _staffRepository.Query()
-                .Where(s => s.UserId == userId)
-                .Select(s => s.Id)
-                .FirstOrDefaultAsync(cancellationToken);
-
+            // Resolve logged-in staff id
+            var userId = User.GetUserId();
+            var staffId = await User.GetStaffIdAsync(_staffRepository, cancellationToken);
             if (staffId == Guid.Empty)
             {
-                throw new NotFoundException("Staff profile not found.");
+                return NotFound(ApiResponse<SalesInvoiceDto>.Failure("Staff profile not found.", StatusCodes.Status404NotFound));
             }
 
             var invoice = new SalesInvoice
