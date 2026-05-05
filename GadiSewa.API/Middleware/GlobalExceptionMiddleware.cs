@@ -1,50 +1,46 @@
-using System.Net;
 using System.Text.Json;
-using GadiSewa.Application.Common.Responses;
 
 namespace GadiSewa.API.Middleware;
 
-public class GlobalExceptionMiddleware
+public sealed class GlobalExceptionMiddleware : IMiddleware
 {
-    private readonly RequestDelegate _next;
     private readonly ILogger<GlobalExceptionMiddleware> _logger;
+    private readonly IWebHostEnvironment _environment;
 
-    public GlobalExceptionMiddleware(RequestDelegate next, ILogger<GlobalExceptionMiddleware> logger)
+    public GlobalExceptionMiddleware(
+        ILogger<GlobalExceptionMiddleware> logger,
+        IWebHostEnvironment environment)
     {
-        _next = next;
         _logger = logger;
+        _environment = environment;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, RequestDelegate next)
     {
         try
         {
-            await _next(context);
+            await next(context);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception");
-            await HandleExceptionAsync(context, ex);
+            await HandleExceptionAsync(context, ex, _environment);
         }
     }
 
-    private static Task HandleExceptionAsync(HttpContext context, Exception exception)
+    private static Task HandleExceptionAsync(HttpContext context, Exception exception, IWebHostEnvironment environment)
     {
-        var status = HttpStatusCode.InternalServerError;
-        var message = "An unexpected error occurred.";
-
-        // Map known exception types to status codes if needed
-        if (exception is UnauthorizedAccessException)
+        var response = new
         {
-            status = HttpStatusCode.Unauthorized;
-            message = "Unauthorized.";
-        }
+            success = false,
+            message = environment.IsDevelopment() ? exception.Message : "An unexpected error occurred.",
+            statusCode = StatusCodes.Status500InternalServerError
+        };
 
-        var response = ApiResponse<object>.Failure(message, (int)status);
         var payload = JsonSerializer.Serialize(response);
 
         context.Response.ContentType = "application/json";
-        context.Response.StatusCode = (int)status;
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
         return context.Response.WriteAsync(payload);
     }
 }
