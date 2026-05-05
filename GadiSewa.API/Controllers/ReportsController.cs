@@ -274,16 +274,19 @@ public sealed class ReportsController : ControllerBase
 
             var report = invoices.Select(i =>
             {
-                var daysOverdue = (int)(now - i.DueDate.Value).TotalDays;
+                var dueDate = i.DueDate.GetValueOrDefault();
+                var daysOverdue = (int)(now - dueDate).TotalDays;
 
                 return new PendingCreditDto
                 {
                     InvoiceId = i.Id,
                     InvoiceNumber = i.InvoiceNumber,
                     CustomerId = i.CustomerId,
-                    CustomerName = $"{i.Customer.User.FirstName} {i.Customer.User.LastName}".Trim(),
+                    CustomerName = i.Customer.User is null
+                        ? string.Empty
+                        : $"{i.Customer.User.FirstName} {i.Customer.User.LastName}".Trim(),
                     InvoiceDate = i.InvoiceDate,
-                    DueDate = i.DueDate.Value,
+                    DueDate = dueDate,
                     TotalAmount = i.TotalAmount,
                     AmountPaid = i.AmountPaid,
                     AmountDue = i.AmountDue,

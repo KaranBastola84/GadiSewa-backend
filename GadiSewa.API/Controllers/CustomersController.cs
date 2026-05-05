@@ -552,14 +552,14 @@ public sealed class CustomersController : ControllerBase
             .AsNoTracking()
             .Where(a => a.CustomerId == id)
             .Include(a => a.Vehicle)
-            .Include(a => a.AssignedStaff).ThenInclude(s => s.User)
+                .Include(a => a.AssignedStaff).ThenInclude(s => s!.User)
             .OrderByDescending(a => a.ScheduledAt)
             .ToListAsync(cancellationToken);
 
         var invoices = await _invoiceRepository.Query()
             .AsNoTracking()
             .Where(i => i.CustomerId == id)
-            .Include(i => i.CreatedByStaff).ThenInclude(s => s.User)
+                .Include(i => i.CreatedByStaff).ThenInclude(s => s!.User)
             .OrderByDescending(i => i.InvoiceDate)
             .ToListAsync(cancellationToken);
 
@@ -575,7 +575,7 @@ public sealed class CustomersController : ControllerBase
                 ProblemDescription = a.ProblemDescription,
                 Notes = a.Notes,
                 VehicleRegistration = a.Vehicle.RegistrationNumber,
-                AssignedStaffName = a.AssignedStaff is not null ? $"{a.AssignedStaff.User.FirstName} {a.AssignedStaff.User.LastName}".Trim() : ""
+                AssignedStaffName = a.AssignedStaff?.User is null ? "" : $"{a.AssignedStaff.User.FirstName} {a.AssignedStaff.User.LastName}".Trim()
             }).ToList(),
             RecentInvoices = invoices.Select(i => new SalesInvoiceHistoryItemDto
             {
@@ -584,7 +584,7 @@ public sealed class CustomersController : ControllerBase
                 InvoiceDate = i.InvoiceDate,
                 TotalAmount = i.TotalAmount,
                 Status = i.Status.ToString(),
-                CreatedByStaffName = i.CreatedByStaff is not null ? $"{i.CreatedByStaff.User.FirstName} {i.CreatedByStaff.User.LastName}".Trim() : ""
+                CreatedByStaffName = i.CreatedByStaff?.User is null ? "" : $"{i.CreatedByStaff.User.FirstName} {i.CreatedByStaff.User.LastName}".Trim()
             }).ToList()
         };
 

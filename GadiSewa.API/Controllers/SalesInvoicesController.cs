@@ -216,7 +216,7 @@ public sealed class SalesInvoicesController : ControllerBase
             // Validate parts if part-based items
             var partIds = request.Items
                 .Where(i => i.PartId.HasValue)
-                .Select(i => i.PartId.Value)
+                .Select(i => i.PartId.GetValueOrDefault())
                 .Distinct()
                 .ToList();
 
