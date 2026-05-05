@@ -329,15 +329,23 @@ public sealed class CustomersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<ApiResponse<object?>>> DeactivateCustomer(Guid id, CancellationToken cancellationToken)
     {
-        var user = await _userRepository.GetByIdAsync(id, cancellationToken);
-        if (user is null)
+        var customer = await _customerRepository.Query()
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+
+        if (customer is null)
+        {
+            return NotFound(ApiResponse<object?>.Failure("Customer not found.", StatusCodes.Status404NotFound));
+        }
+
+        if (customer.User is null)
         {
             return NotFound(ApiResponse<object?>.Failure("User not found.", StatusCodes.Status404NotFound));
         }
 
-        user.IsActive = false;
-        user.UpdatedAt = DateTimeOffset.UtcNow;
-        _userRepository.Update(user);
+        customer.User.IsActive = false;
+        customer.User.UpdatedAt = DateTimeOffset.UtcNow;
+        _userRepository.Update(customer.User);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Ok(ApiResponse<object?>.Success(null));
