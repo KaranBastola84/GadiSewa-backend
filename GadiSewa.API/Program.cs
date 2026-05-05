@@ -2,6 +2,7 @@ using GadiSewa.Application;
 using GadiSewa.Infrastructure;
 using GadiSewa.Infrastructure.Authentication;
 using GadiSewa.Domain.Enums;
+using GadiSewa.API.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -9,14 +10,32 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var corsPolicyName = "CorsPolicy";
+var configuredCorsOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>()?
+    .Select(origin => origin.Trim().TrimEnd('/'))
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray() ?? [];
+
+var allowedCorsOrigins = configuredCorsOrigins.Length > 0
+    ? configuredCorsOrigins
+    : ["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000"];
+
+if (!builder.Environment.IsDevelopment() && configuredCorsOrigins.Length == 0)
+{
+    throw new InvalidOperationException("CORS AllowedOrigins must be configured for non-development environments.");
+}
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowReactApp", policy =>
+    options.AddPolicy(corsPolicyName, policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins(allowedCorsOrigins)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -60,6 +79,7 @@ builder.Services.AddSwaggerGen(options =>
 });
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddTransient<GlobalExceptionMiddleware>();
 
 var jwtOptions = builder.Configuration
     .GetSection(JwtOptions.SectionName)
@@ -97,8 +117,9 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+app.UseMiddleware<GlobalExceptionMiddleware>();
 
-app.UseCors("AllowReactApp");
+app.UseCors(corsPolicyName);
 
 // Only use HTTPS redirection in production
 if (!app.Environment.IsDevelopment())

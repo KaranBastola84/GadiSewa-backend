@@ -1,5 +1,6 @@
 using GadiSewa.Application.Common.Exceptions;
 using GadiSewa.Application.Common.Responses;
+using GadiSewa.Application.DTOs.CreditPayments;
 using GadiSewa.Application.DTOs.Customers;
 using GadiSewa.Application.Interfaces.Persistence;
 using GadiSewa.Application.Interfaces.Services;
@@ -21,6 +22,7 @@ public sealed class CustomersController : ControllerBase
     private readonly IRepository<Customer> _customerRepository;
     private readonly IRepository<Vehicle> _vehicleRepository;
     private readonly IRepository<SalesInvoice> _invoiceRepository;
+    private readonly IRepository<CreditPayment> _creditPaymentRepository;
     private readonly IRepository<Appointment> _appointmentRepository;
     private readonly IPasswordHasherService _passwordHasherService;
     private readonly IEmailService _emailService;
@@ -31,6 +33,7 @@ public sealed class CustomersController : ControllerBase
         IRepository<Customer> customerRepository,
         IRepository<Vehicle> vehicleRepository,
         IRepository<SalesInvoice> invoiceRepository,
+        IRepository<CreditPayment> creditPaymentRepository,
         IRepository<Appointment> appointmentRepository,
         IPasswordHasherService passwordHasherService,
         IEmailService emailService,
@@ -40,6 +43,7 @@ public sealed class CustomersController : ControllerBase
         _customerRepository = customerRepository;
         _vehicleRepository = vehicleRepository;
         _invoiceRepository = invoiceRepository;
+        _creditPaymentRepository = creditPaymentRepository;
         _appointmentRepository = appointmentRepository;
         _passwordHasherService = passwordHasherService;
         _emailService = emailService;
@@ -329,15 +333,23 @@ public sealed class CustomersController : ControllerBase
     [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<ApiResponse<object?>>> DeactivateCustomer(Guid id, CancellationToken cancellationToken)
     {
-        var user = await _userRepository.GetByIdAsync(id, cancellationToken);
-        if (user is null)
+        var customer = await _customerRepository.Query()
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+
+        if (customer is null)
+        {
+            return NotFound(ApiResponse<object?>.Failure("Customer not found.", StatusCodes.Status404NotFound));
+        }
+
+        if (customer.User is null)
         {
             return NotFound(ApiResponse<object?>.Failure("User not found.", StatusCodes.Status404NotFound));
         }
 
-        user.IsActive = false;
-        user.UpdatedAt = DateTimeOffset.UtcNow;
-        _userRepository.Update(user);
+        customer.User.IsActive = false;
+        customer.User.UpdatedAt = DateTimeOffset.UtcNow;
+        _userRepository.Update(customer.User);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return Ok(ApiResponse<object?>.Success(null));
@@ -552,14 +564,14 @@ public sealed class CustomersController : ControllerBase
             .AsNoTracking()
             .Where(a => a.CustomerId == id)
             .Include(a => a.Vehicle)
-            .Include(a => a.AssignedStaff).ThenInclude(s => s.User)
+                .Include(a => a.AssignedStaff).ThenInclude(s => s!.User)
             .OrderByDescending(a => a.ScheduledAt)
             .ToListAsync(cancellationToken);
 
         var invoices = await _invoiceRepository.Query()
             .AsNoTracking()
             .Where(i => i.CustomerId == id)
-            .Include(i => i.CreatedByStaff).ThenInclude(s => s.User)
+                .Include(i => i.CreatedByStaff).ThenInclude(s => s!.User)
             .OrderByDescending(i => i.InvoiceDate)
             .ToListAsync(cancellationToken);
 
@@ -575,7 +587,7 @@ public sealed class CustomersController : ControllerBase
                 ProblemDescription = a.ProblemDescription,
                 Notes = a.Notes,
                 VehicleRegistration = a.Vehicle.RegistrationNumber,
-                AssignedStaffName = a.AssignedStaff is not null ? $"{a.AssignedStaff.User.FirstName} {a.AssignedStaff.User.LastName}".Trim() : ""
+                AssignedStaffName = a.AssignedStaff?.User is null ? "" : $"{a.AssignedStaff.User.FirstName} {a.AssignedStaff.User.LastName}".Trim()
             }).ToList(),
             RecentInvoices = invoices.Select(i => new SalesInvoiceHistoryItemDto
             {
@@ -584,10 +596,81 @@ public sealed class CustomersController : ControllerBase
                 InvoiceDate = i.InvoiceDate,
                 TotalAmount = i.TotalAmount,
                 Status = i.Status.ToString(),
-                CreatedByStaffName = i.CreatedByStaff is not null ? $"{i.CreatedByStaff.User.FirstName} {i.CreatedByStaff.User.LastName}".Trim() : ""
+                CreatedByStaffName = i.CreatedByStaff?.User is null ? "" : $"{i.CreatedByStaff.User.FirstName} {i.CreatedByStaff.User.LastName}".Trim()
             }).ToList()
         };
 
         return Ok(ApiResponse<CustomerHistorySummaryDto>.Success(dto));
+    }
+
+    [HttpGet("{id:guid}/credit-history")]
+    [Authorize]
+    public async Task<ActionResult<ApiResponse<CustomerCreditHistoryDto>>> GetCustomerCreditHistory(Guid id, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        var userRole = User.FindFirst(ClaimTypes.Role)?.Value;
+
+        if (userRole != UserRole.Admin.ToString() && userRole != UserRole.Staff.ToString())
+        {
+            var currentCustomerId = await _customerRepository.Query()
+                .Where(c => c.UserId == userId)
+                .Select(c => c.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (currentCustomerId == Guid.Empty || currentCustomerId != id)
+            {
+                return Forbid();
+            }
+        }
+
+        var customer = await _customerRepository.Query()
+            .AsNoTracking()
+            .Include(c => c.User)
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+
+        if (customer is null)
+        {
+            return NotFound(ApiResponse<CustomerCreditHistoryDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
+        }
+
+        var payments = await _creditPaymentRepository.Query()
+            .AsNoTracking()
+            .Where(p => p.CustomerId == id)
+            .Include(p => p.SalesInvoice)
+            .Include(p => p.Customer)
+            .ThenInclude(c => c.User)
+            .OrderByDescending(p => p.PaymentDate)
+            .ToListAsync(cancellationToken);
+
+        var totalOutstanding = await _invoiceRepository.Query()
+            .AsNoTracking()
+            .Where(i => i.CustomerId == id)
+            .SumAsync(i => i.AmountDue, cancellationToken);
+
+        var dto = new CustomerCreditHistoryDto
+        {
+            CustomerId = customer.Id,
+            CustomerName = customer.User is null ? string.Empty : $"{customer.User.FirstName} {customer.User.LastName}".Trim(),
+            TotalPaid = payments.Sum(p => p.Amount),
+            TotalOutstanding = totalOutstanding,
+            Payments = payments.Select(p => new CreditPaymentDto
+            {
+                CreditPaymentId = p.Id,
+                SalesInvoiceId = p.SalesInvoiceId,
+                InvoiceNumber = p.SalesInvoice?.InvoiceNumber ?? string.Empty,
+                CustomerId = p.CustomerId,
+                CustomerName = p.Customer?.User is null ? string.Empty : $"{p.Customer.User.FirstName} {p.Customer.User.LastName}".Trim(),
+                Amount = p.Amount,
+                AmountBeforePayment = p.AmountBeforePayment,
+                AmountAfterPayment = p.AmountAfterPayment,
+                PaymentDate = p.PaymentDate,
+                PaymentMethod = p.PaymentMethod,
+                ReferenceNumber = p.ReferenceNumber,
+                IsVerified = p.IsVerified,
+                Notes = p.Notes
+            }).ToList()
+        };
+
+        return Ok(ApiResponse<CustomerCreditHistoryDto>.Success(dto));
     }
 }

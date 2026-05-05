@@ -74,7 +74,7 @@ public sealed class CustomerHistoryController : ControllerBase
                 .Where(a => a.CustomerId == customer.Id)
                 .Include(a => a.Vehicle)
                 .Include(a => a.AssignedStaff)
-                .ThenInclude(s => s.User)
+                .ThenInclude(s => s!.User)
                 .Include(a => a.Reviews)
                 .OrderByDescending(a => a.ScheduledAt)
                 .ToListAsync(cancellationToken);
@@ -126,7 +126,7 @@ public sealed class CustomerHistoryController : ControllerBase
                         Status = a.Status.ToString(),
                         ProblemDescription = a.ProblemDescription,
                         Notes = a.Notes,
-                        AssignedStaffName = a.AssignedStaff is not null ? $"{a.AssignedStaff.User.FirstName} {a.AssignedStaff.User.LastName}".Trim() : "Unassigned",
+                        AssignedStaffName = a.AssignedStaff?.User is null ? "Unassigned" : $"{a.AssignedStaff.User.FirstName} {a.AssignedStaff.User.LastName}".Trim(),
                         ReviewCount = a.Reviews.Count
                     })
                     .ToList(),
@@ -142,7 +142,7 @@ public sealed class CustomerHistoryController : ControllerBase
                         DiscountAmount = i.DiscountAmount,
                         TaxAmount = i.TaxAmount,
                         TotalAmount = i.TotalAmount,
-                        CreatedByStaffName = i.CreatedByStaff is not null ? $"{i.CreatedByStaff.User.FirstName} {i.CreatedByStaff.User.LastName}".Trim() : "Unknown",
+                        CreatedByStaffName = i.CreatedByStaff?.User is null ? "Unknown" : $"{i.CreatedByStaff.User.FirstName} {i.CreatedByStaff.User.LastName}".Trim(),
                         Items = i.Items.Select(it => new SalesInvoiceItemDetailDto
                         {
                             Description = it.Description,

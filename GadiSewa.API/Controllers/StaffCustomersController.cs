@@ -14,7 +14,7 @@ namespace GadiSewa.API.Controllers;
 
 [ApiController]
 [Route("api/staff/customers")]
-[Authorize(Policy = "StaffOnly")]
+[Authorize(Policy = "BackOfficeOnly")]
 public sealed class StaffCustomersController : ControllerBase
 {
     private readonly IUserRepository _userRepository;
@@ -149,16 +149,11 @@ public sealed class StaffCustomersController : ControllerBase
     /// </summary>
     [HttpGet("search")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<CustomerSearchResultDto>>>> SearchCustomers(
-        [FromQuery] string? query,
-        [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20,
+        [FromQuery] string? q,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            if (pageNumber < 1) pageNumber = 1;
-            if (pageSize < 1 || pageSize > 100) pageSize = 20;
-
             IQueryable<Customer> customersQuery = _customerRepository.Query()
                 .AsNoTracking()
                 .Include(c => c.User)
@@ -167,25 +162,22 @@ public sealed class StaffCustomersController : ControllerBase
                 .Include(c => c.Reviews);
 
             // Apply filter if query provided
-            if (!string.IsNullOrWhiteSpace(query))
+            if (!string.IsNullOrWhiteSpace(q))
             {
-                var searchTerm = query.Trim().ToLowerInvariant();
+                var searchTerm = q.Trim().ToLowerInvariant();
+                var customerIdMatch = Guid.TryParse(q.Trim(), out var customerId) ? customerId : Guid.Empty;
+
                 customersQuery = customersQuery.Where(c =>
                     c.User.FirstName.ToLower().Contains(searchTerm) ||
                     c.User.LastName.ToLower().Contains(searchTerm) ||
-                    c.User.Email.ToLower().Contains(searchTerm) ||
-                    c.User.PhoneNumber.Contains(searchTerm) ||
-                    c.Vehicles.Any(v => v.RegistrationNumber.ToLower().Contains(searchTerm)) ||
-                    c.Id.ToString().StartsWith(searchTerm));
+                    c.User.PhoneNumber.ToLower().Contains(searchTerm) ||
+                    (customerIdMatch != Guid.Empty && c.Id == customerIdMatch) ||
+                    c.Vehicles.Any(v => v.RegistrationNumber.ToLower().Contains(searchTerm)));
             }
-
-            var totalCount = await customersQuery.CountAsync(cancellationToken);
 
             var results = await customersQuery
                 .OrderBy(c => c.User.LastName)
                 .ThenBy(c => c.User.FirstName)
-                .Skip((pageNumber - 1) * pageSize)
-                .Take(pageSize)
                 .ToListAsync(cancellationToken);
 
             var dtos = results.Select(c => new CustomerSearchResultDto
@@ -451,7 +443,7 @@ public sealed class StaffCustomersController : ControllerBase
                 .Where(a => a.CustomerId == id)
                 .Include(a => a.Vehicle)
                 .Include(a => a.AssignedStaff)
-                .ThenInclude(s => s.User)
+                .ThenInclude(s => s!.User)
                 .Include(a => a.Reviews)
                 .OrderByDescending(a => a.ScheduledAt)
                 .ToListAsync(cancellationToken);
@@ -503,7 +495,7 @@ public sealed class StaffCustomersController : ControllerBase
                         Status = a.Status.ToString(),
                         ProblemDescription = a.ProblemDescription,
                         Notes = a.Notes,
-                        AssignedStaffName = a.AssignedStaff is not null ? $"{a.AssignedStaff.User.FirstName} {a.AssignedStaff.User.LastName}".Trim() : "Unassigned",
+                        AssignedStaffName = a.AssignedStaff?.User is null ? "Unassigned" : $"{a.AssignedStaff.User.FirstName} {a.AssignedStaff.User.LastName}".Trim(),
                         ReviewCount = a.Reviews.Count
                     })
                     .ToList(),
@@ -519,7 +511,7 @@ public sealed class StaffCustomersController : ControllerBase
                         DiscountAmount = i.DiscountAmount,
                         TaxAmount = i.TaxAmount,
                         TotalAmount = i.TotalAmount,
-                        CreatedByStaffName = i.CreatedByStaff is not null ? $"{i.CreatedByStaff.User.FirstName} {i.CreatedByStaff.User.LastName}".Trim() : "Unknown",
+                        CreatedByStaffName = i.CreatedByStaff?.User is null ? "Unknown" : $"{i.CreatedByStaff.User.FirstName} {i.CreatedByStaff.User.LastName}".Trim(),
                         Items = i.Items.Select(it => new SalesInvoiceItemDetailDto
                         {
                             Description = it.Description,

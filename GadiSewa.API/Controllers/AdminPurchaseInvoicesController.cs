@@ -8,6 +8,8 @@ using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using GadiSewa.API.Extensions;
+using System.Security.Claims;
 
 namespace GadiSewa.API.Controllers;
 
@@ -41,6 +43,8 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         _notificationService = notificationService;
         _unitOfWork = unitOfWork;
     }
+
+
 
     /// <summary>
     /// Get all purchase invoices with optional filtering
@@ -178,11 +182,17 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
 
             var invoiceNumber = $"PUR-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8].ToUpper()}";
 
+            var userId = User.GetUserId();
+            var staffId = await User.GetStaffIdAsync(_staffRepository, cancellationToken);
+            if (staffId == Guid.Empty)
+            {
+                return NotFound(ApiResponse<PurchaseInvoiceDto>.Failure("Staff profile not found.", StatusCodes.Status404NotFound));
+            }
             var invoice = new PurchaseInvoice
             {
                 InvoiceNumber = invoiceNumber,
                 VendorId = request.VendorId,
-                CreatedByStaffId = Guid.NewGuid(), // Placeholder - would use logged-in staff in real scenario
+                CreatedByStaffId = staffId,
                 InvoiceDate = request.InvoiceDate,
                 DueDate = request.DueDate,
                 SubTotal = subTotal,

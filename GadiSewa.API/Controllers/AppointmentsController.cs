@@ -6,6 +6,7 @@ using GadiSewa.Application.DTOs.Appointments;
 using GadiSewa.Application.Interfaces.Persistence;
 using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
+using System.Security.Claims;
 
 namespace GadiSewa.API.Controllers;
 
@@ -36,8 +37,8 @@ public class AppointmentsController : ControllerBase
 
     private Guid GetCurrentUserId()
     {
-        var userIdClaim = User.FindFirst("uid")?.Value;
-        return Guid.Parse(userIdClaim!);
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.Parse(userIdValue ?? Guid.Empty.ToString());
     }
 
     [HttpPost]

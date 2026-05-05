@@ -6,6 +6,7 @@ using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace GadiSewa.API.Controllers;
 
@@ -33,8 +34,8 @@ public sealed class ReviewsController : ControllerBase
 
     private Guid GetCurrentUserId()
     {
-        var userIdClaim = User.FindFirst("uid")?.Value;
-        return Guid.Parse(userIdClaim!);
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return Guid.Parse(userIdValue ?? Guid.Empty.ToString());
     }
 
     private async Task<Customer?> GetCurrentCustomerAsync(CancellationToken cancellationToken)
