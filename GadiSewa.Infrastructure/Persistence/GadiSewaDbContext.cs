@@ -24,6 +24,7 @@ public sealed class GadiSewaDbContext : DbContext
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Review> Reviews => Set<Review>();
     public DbSet<PartRequest> PartRequests => Set<PartRequest>();
+    public DbSet<NotificationLog> NotificationLogs => Set<NotificationLog>();
     public DbSet<CreditPayment> CreditPayments => Set<CreditPayment>();
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
@@ -127,6 +128,18 @@ public sealed class GadiSewaDbContext : DbContext
             entity.Property(x => x.Name).HasMaxLength(150);
             entity.Property(x => x.Description).HasMaxLength(500);
             entity.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            entity.Property(x => x.LowStockNotified).HasDefaultValue(false);
+        });
+
+        modelBuilder.Entity<NotificationLog>(entity =>
+        {
+            entity.Property(x => x.NotificationType).HasMaxLength(80);
+            entity.Property(x => x.Channel).HasMaxLength(30);
+            entity.Property(x => x.Recipient).HasMaxLength(256);
+            entity.Property(x => x.Subject).HasMaxLength(300);
+            entity.Property(x => x.Message).HasMaxLength(2000);
+            entity.Property(x => x.Error).HasMaxLength(1000);
+            entity.Property(x => x.RelatedEntityType).HasMaxLength(80);
         });
 
         modelBuilder.Entity<Vendor>(entity =>

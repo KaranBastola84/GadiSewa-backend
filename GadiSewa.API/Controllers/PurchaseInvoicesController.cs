@@ -2,6 +2,7 @@ using GadiSewa.Application.Common.Exceptions;
 using GadiSewa.Application.Common.Responses;
 using GadiSewa.Application.DTOs.PurchaseInvoices;
 using GadiSewa.Application.Interfaces.Persistence;
+using GadiSewa.Application.Interfaces.Services;
 using GadiSewa.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,6 +21,7 @@ public sealed class PurchaseInvoicesController : ControllerBase
     private readonly IRepository<Part> _partRepository;
     private readonly IRepository<Vendor> _vendorRepository;
     private readonly IRepository<Staff> _staffRepository;
+    private readonly INotificationService _notificationService;
     private readonly IUnitOfWork _unitOfWork;
 
     public PurchaseInvoicesController(
@@ -28,6 +30,7 @@ public sealed class PurchaseInvoicesController : ControllerBase
         IRepository<Part> partRepository,
         IRepository<Vendor> vendorRepository,
         IRepository<Staff> staffRepository,
+        INotificationService notificationService,
         IUnitOfWork unitOfWork)
     {
         _purchaseInvoiceRepository = purchaseInvoiceRepository;
@@ -35,6 +38,7 @@ public sealed class PurchaseInvoicesController : ControllerBase
         _partRepository = partRepository;
         _vendorRepository = vendorRepository;
         _staffRepository = staffRepository;
+        _notificationService = notificationService;
         _unitOfWork = unitOfWork;
     }
 
@@ -155,6 +159,7 @@ public sealed class PurchaseInvoicesController : ControllerBase
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _notificationService.CheckAndNotifyLowStockAsync(parts.Keys, cancellationToken);
 
         var created = await _purchaseInvoiceRepository.Query()
             .AsNoTracking()
@@ -310,7 +315,7 @@ public sealed class PurchaseInvoicesController : ControllerBase
     {
         return new PurchaseInvoiceDto
         {
-            PurchaseInvoiceId = invoice.Id,
+            InvoiceId = invoice.Id,
             InvoiceNumber = invoice.InvoiceNumber,
             VendorId = invoice.VendorId,
             VendorName = invoice.Vendor?.Name ?? string.Empty,
@@ -326,7 +331,7 @@ public sealed class PurchaseInvoicesController : ControllerBase
             Status = invoice.Status.ToString(),
             Items = invoice.Items.Select(it => new PurchaseInvoiceItemDto
             {
-                PurchaseInvoiceItemId = it.Id,
+                ItemId = it.Id,
                 PartId = it.PartId,
                 PartName = it.Part?.Name ?? string.Empty,
                 PartNumber = it.Part?.PartNumber ?? string.Empty,

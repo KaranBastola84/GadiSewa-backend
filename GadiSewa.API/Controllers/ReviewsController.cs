@@ -116,6 +116,42 @@ public sealed class ReviewsController : ControllerBase
         }
     }
 
+    [HttpGet("appointment/{appointmentId:guid}")]
+    public async Task<ActionResult<ApiResponse<ReviewDto?>>> GetReviewByAppointmentId(Guid appointmentId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var review = await _reviewRepository.Query()
+                .AsNoTracking()
+                .Where(x => x.AppointmentId == appointmentId)
+                .Include(x => x.Customer)
+                    .ThenInclude(x => x.User)
+                .Include(x => x.Appointment)
+                    .ThenInclude(x => x.Vehicle)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (review is null)
+            {
+                return Ok(ApiResponse<ReviewDto?>.Success(null));
+            }
+
+            if (!User.IsInRole(UserRole.Admin.ToString()) && !User.IsInRole(UserRole.Staff.ToString()))
+            {
+                var customer = await GetCurrentCustomerAsync(cancellationToken);
+                if (customer is null || customer.Id != review.CustomerId)
+                {
+                    return Forbid();
+                }
+            }
+
+            return Ok(ApiResponse<ReviewDto?>.Success(ReviewDto.FromReview(review)));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<ReviewDto?>.Failure($"Error retrieving review: {ex.Message}", StatusCodes.Status500InternalServerError));
+        }
+    }
+
     [HttpPost]
     [Authorize(Policy = "CustomerOnly")]
     public async Task<ActionResult<ApiResponse<ReviewDto>>> CreateReview(

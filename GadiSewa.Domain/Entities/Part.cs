@@ -16,6 +16,8 @@ public class Part : BaseEntity
 
     public int ReorderLevel { get; set; }
 
+    public bool LowStockNotified { get; set; }
+
     public ICollection<PurchaseInvoiceItem> PurchaseInvoiceItems { get; set; } = new List<PurchaseInvoiceItem>();
 
     public ICollection<SalesInvoiceItem> SalesInvoiceItems { get; set; } = new List<SalesInvoiceItem>();
