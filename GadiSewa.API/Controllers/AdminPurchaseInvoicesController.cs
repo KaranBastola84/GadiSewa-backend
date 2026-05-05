@@ -8,6 +8,7 @@ using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace GadiSewa.API.Controllers;
 
@@ -40,6 +41,17 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         _staffRepository = staffRepository;
         _notificationService = notificationService;
         _unitOfWork = unitOfWork;
+    }
+
+    private Guid GetCurrentUserId()
+    {
+        var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!Guid.TryParse(userIdValue, out var userId))
+        {
+            throw new UnauthorizedException("Invalid user identity.");
+        }
+
+        return userId;
     }
 
     /// <summary>
@@ -178,11 +190,22 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
 
             var invoiceNumber = $"PUR-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8].ToUpper()}";
 
+            var userId = GetCurrentUserId();
+            var staffId = await _staffRepository.Query()
+                .Where(s => s.UserId == userId)
+                .Select(s => s.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (staffId == Guid.Empty)
+            {
+                throw new NotFoundException("Staff profile not found.");
+            }
+
             var invoice = new PurchaseInvoice
             {
                 InvoiceNumber = invoiceNumber,
                 VendorId = request.VendorId,
-                CreatedByStaffId = Guid.NewGuid(), // Placeholder - would use logged-in staff in real scenario
+                CreatedByStaffId = staffId,
                 InvoiceDate = request.InvoiceDate,
                 DueDate = request.DueDate,
                 SubTotal = subTotal,

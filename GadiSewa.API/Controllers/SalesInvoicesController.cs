@@ -22,6 +22,7 @@ public sealed class SalesInvoicesController : ControllerBase
     private readonly IRepository<Part> _partRepository;
     private readonly IRepository<Appointment> _appointmentRepository;
     private readonly IRepository<CreditPayment> _creditPaymentRepository;
+    private readonly IRepository<Staff> _staffRepository;
     private readonly INotificationService _notificationService;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -32,6 +33,7 @@ public sealed class SalesInvoicesController : ControllerBase
         IRepository<Part> partRepository,
         IRepository<Appointment> appointmentRepository,
         IRepository<CreditPayment> creditPaymentRepository,
+        IRepository<Staff> staffRepository,
         INotificationService notificationService,
         IUnitOfWork unitOfWork)
     {
@@ -41,6 +43,7 @@ public sealed class SalesInvoicesController : ControllerBase
         _partRepository = partRepository;
         _appointmentRepository = appointmentRepository;
         _creditPaymentRepository = creditPaymentRepository;
+        _staffRepository = staffRepository;
         _notificationService = notificationService;
         _unitOfWork = unitOfWork;
     }
@@ -251,11 +254,22 @@ public sealed class SalesInvoicesController : ControllerBase
 
             var invoiceNumber = $"SAL-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..8].ToUpper()}";
 
+            var userId = GetCurrentUserId();
+            var staffId = await _staffRepository.Query()
+                .Where(s => s.UserId == userId)
+                .Select(s => s.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (staffId == Guid.Empty)
+            {
+                throw new NotFoundException("Staff profile not found.");
+            }
+
             var invoice = new SalesInvoice
             {
                 InvoiceNumber = invoiceNumber,
                 CustomerId = request.CustomerId,
-                CreatedByStaffId = Guid.NewGuid(), // Placeholder - would use logged-in staff
+                CreatedByStaffId = staffId,
                 AppointmentId = request.AppointmentId,
                 InvoiceDate = request.InvoiceDate,
                 DueDate = request.DueDate,
