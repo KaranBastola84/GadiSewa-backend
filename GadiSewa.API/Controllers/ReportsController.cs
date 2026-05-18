@@ -285,6 +285,7 @@ public sealed class ReportsController : ControllerBase
                     CustomerName = i.Customer.User is null
                         ? string.Empty
                         : $"{i.Customer.User.FirstName} {i.Customer.User.LastName}".Trim(),
+                    Email = i.Customer.User?.Email ?? string.Empty,
                     InvoiceDate = i.InvoiceDate,
                     DueDate = dueDate,
                     TotalAmount = i.TotalAmount,

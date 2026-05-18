@@ -10,6 +10,8 @@ public sealed class PendingCreditDto
 
     public string CustomerName { get; init; } = string.Empty;
 
+    public string Email { get; init; } = string.Empty;
+
     public DateTimeOffset InvoiceDate { get; init; }
 
     public DateTimeOffset DueDate { get; init; }
