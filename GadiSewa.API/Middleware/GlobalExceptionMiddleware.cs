@@ -1,3 +1,4 @@
+using FluentValidation;
 using GadiSewa.Application.Common.Exceptions;
 using GadiSewa.Application.Common.Responses;
 
@@ -43,24 +44,42 @@ public sealed class GlobalExceptionMiddleware : IMiddleware
 
     private static Task HandleExceptionAsync(HttpContext context, Exception exception, IWebHostEnvironment environment)
     {
-        var (statusCode, message) = MapException(exception, environment.IsDevelopment());
-        var payload = ApiResponse<object?>.Failure(message, statusCode);
+        var (statusCode, errors) = MapException(exception, environment.IsDevelopment());
+        var payload = ApiResponse<object?>.Failure(errors, statusCode);
 
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = statusCode;
         return context.Response.WriteAsJsonAsync(payload);
     }
 
-    private static (int StatusCode, string Message) MapException(Exception exception, bool isDevelopment)
+    private static (int StatusCode, IReadOnlyList<string> Errors) MapException(Exception exception, bool isDevelopment)
     {
         return exception switch
         {
-            UnauthorizedException => (StatusCodes.Status401Unauthorized, exception.Message),
-            NotFoundException => (StatusCodes.Status404NotFound, exception.Message),
-            ConflictException => (StatusCodes.Status409Conflict, exception.Message),
-            ArgumentException => (StatusCodes.Status400BadRequest, exception.Message),
-            FormatException => (StatusCodes.Status400BadRequest, exception.Message),
-            _ => (StatusCodes.Status500InternalServerError, isDevelopment ? exception.Message : "An unexpected error occurred.")
+            ValidationException validationException => (
+                StatusCodes.Status400BadRequest,
+                MapValidationErrors(validationException)),
+            UnauthorizedException => (StatusCodes.Status401Unauthorized, [exception.Message]),
+            NotFoundException => (StatusCodes.Status404NotFound, [exception.Message]),
+            ConflictException => (StatusCodes.Status409Conflict, [exception.Message]),
+            ArgumentException => (StatusCodes.Status400BadRequest, [exception.Message]),
+            FormatException => (StatusCodes.Status400BadRequest, [exception.Message]),
+            _ => (
+                StatusCodes.Status500InternalServerError,
+                [isDevelopment ? exception.Message : "An unexpected error occurred."])
         };
+    }
+
+    private static IReadOnlyList<string> MapValidationErrors(ValidationException exception)
+    {
+        var errors = exception.Errors
+            .Select(x => x.ErrorMessage)
+            .Where(message => !string.IsNullOrWhiteSpace(message))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return errors.Length > 0
+            ? errors
+            : ["One or more validation errors occurred."];
     }
 }
