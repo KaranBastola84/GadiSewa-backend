@@ -1,17 +1,19 @@
 using GadiSewa.Application;
-using GadiSewa.Application.Common.Responses;
 using GadiSewa.Infrastructure;
 using GadiSewa.Infrastructure.Authentication;
 using GadiSewa.Domain.Enums;
 using GadiSewa.API.Middleware;
-using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog((context, services, loggerConfiguration) => loggerConfiguration
+    .ReadFrom.Configuration(context.Configuration)
+    .ReadFrom.Services(services)
+    .Enrich.FromLogContext());
 
 var corsPolicyName = "CorsPolicy";
 var configuredCorsOrigins = builder.Configuration
@@ -43,22 +45,7 @@ builder.Services.AddCors(options =>
 });
 
 
-builder.Services.AddControllers()
-    .ConfigureApiBehaviorOptions(options =>
-    {
-        options.InvalidModelStateResponseFactory = context =>
-        {
-            var errors = context.ModelState.Values
-                .SelectMany(x => x.Errors)
-                .Select(x => string.IsNullOrWhiteSpace(x.ErrorMessage) ? "One or more validation errors occurred." : x.ErrorMessage)
-                .Distinct(StringComparer.Ordinal)
-                .ToArray();
-
-            return new BadRequestObjectResult(
-                ApiResponse<object?>.Failure(errors, StatusCodes.Status400BadRequest));
-        };
-    });
-builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -135,6 +122,7 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+app.UseSerilogRequestLogging();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseCors(corsPolicyName);
