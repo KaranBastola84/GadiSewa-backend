@@ -1,9 +1,11 @@
 using GadiSewa.Application;
+using GadiSewa.Application.Common.Responses;
 using GadiSewa.Infrastructure;
 using GadiSewa.Infrastructure.Authentication;
 using GadiSewa.Domain.Enums;
 using GadiSewa.API.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
@@ -40,7 +42,21 @@ builder.Services.AddCors(options =>
 });
 
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState.Values
+                .SelectMany(x => x.Errors)
+                .Select(x => string.IsNullOrWhiteSpace(x.ErrorMessage) ? "One or more validation errors occurred." : x.ErrorMessage)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+
+            return new BadRequestObjectResult(
+                ApiResponse<object?>.Failure(errors, StatusCodes.Status400BadRequest));
+        };
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
