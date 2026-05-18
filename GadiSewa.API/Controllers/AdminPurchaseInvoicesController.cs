@@ -216,6 +216,14 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
                 await _purchaseInvoiceItemRepository.AddAsync(item, cancellationToken);
             }
 
+            foreach (var item in items)
+            {
+                var part = parts.First(p => p.Id == item.PartId);
+                part.StockQuantity += item.Quantity;
+                part.UpdatedAt = DateTimeOffset.UtcNow;
+                _partRepository.Update(part);
+            }
+
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             // Reload for response
