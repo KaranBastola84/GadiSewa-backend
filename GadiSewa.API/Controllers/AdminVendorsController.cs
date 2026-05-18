@@ -13,11 +13,16 @@ namespace GadiSewa.API.Controllers;
 public sealed class AdminVendorsController : ControllerBase
 {
     private readonly IRepository<Vendor> _vendorRepository;
+    private readonly IRepository<PurchaseInvoice> _purchaseInvoiceRepository;
     private readonly IUnitOfWork _unitOfWork;
 
-    public AdminVendorsController(IRepository<Vendor> vendorRepository, IUnitOfWork unitOfWork)
+    public AdminVendorsController(
+        IRepository<Vendor> vendorRepository,
+        IRepository<PurchaseInvoice> purchaseInvoiceRepository,
+        IUnitOfWork unitOfWork)
     {
         _vendorRepository = vendorRepository;
+        _purchaseInvoiceRepository = purchaseInvoiceRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -100,6 +105,16 @@ public sealed class AdminVendorsController : ControllerBase
         if (vendor is null)
         {
             return NotFound(ApiResponse<object?>.Failure("Vendor not found.", StatusCodes.Status404NotFound));
+        }
+
+        var invoices = await _purchaseInvoiceRepository
+            .ListAsync(pi => pi.VendorId == id, cancellationToken);
+
+        if (invoices.Count > 0)
+        {
+            return BadRequest(ApiResponse<object?>.Failure(
+                "Cannot delete vendor with existing purchase invoices.",
+                StatusCodes.Status400BadRequest));
         }
 
         _vendorRepository.Remove(vendor);
