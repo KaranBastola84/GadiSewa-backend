@@ -206,6 +206,40 @@ public sealed class AdminUsersController : ControllerBase
         return Ok(ApiResponse<object?>.Success(null));
     }
 
+    [HttpPut("{id:guid}/role")]
+    public async Task<ActionResult<ApiResponse<object?>>> UpdateRole(
+        Guid id,
+        [FromBody] UpdateUserRoleRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.IsDefined(typeof(UserRole), request.Role) || request.Role == 0)
+        {
+            return BadRequest(ApiResponse<object?>.Failure(
+                "Invalid role value.",
+                StatusCodes.Status400BadRequest));
+        }
+
+        var user = await _userRepository.GetByIdAsync(id, cancellationToken);
+        if (user is null)
+        {
+            return NotFound(ApiResponse<object?>.Failure("User not found.", StatusCodes.Status404NotFound));
+        }
+
+        if (user.Role == request.Role)
+        {
+            return BadRequest(ApiResponse<object?>.Failure(
+                "User already has this role.",
+                StatusCodes.Status400BadRequest));
+        }
+
+        user.Role = request.Role;
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+        _userRepository.Update(user);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return Ok(ApiResponse<object?>.Success(null));
+    }
+
     private bool HasValidBootstrapKey(string? bootstrapKey)
     {
         var configuredKey = _configuration["AdminBootstrap:SetupKey"];
