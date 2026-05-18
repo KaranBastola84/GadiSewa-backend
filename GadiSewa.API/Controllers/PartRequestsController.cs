@@ -12,13 +12,14 @@ namespace GadiSewa.API.Controllers;
 
 [ApiController]
 [Route("api/part-requests")]
-[Authorize(Policy = "StaffOnly")]
+[Authorize]
 public sealed class PartRequestsController : ControllerBase
 {
     private readonly IRepository<PartRequest> _partRequestRepository;
     private readonly IRepository<Part> _partRepository;
     private readonly IRepository<Vendor> _vendorRepository;
     private readonly IRepository<Staff> _staffRepository;
+    private readonly IRepository<Customer> _customerRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public PartRequestsController(
@@ -26,12 +27,14 @@ public sealed class PartRequestsController : ControllerBase
         IRepository<Part> partRepository,
         IRepository<Vendor> vendorRepository,
         IRepository<Staff> staffRepository,
+        IRepository<Customer> customerRepository,
         IUnitOfWork unitOfWork)
     {
         _partRequestRepository = partRequestRepository;
         _partRepository = partRepository;
         _vendorRepository = vendorRepository;
         _staffRepository = staffRepository;
+        _customerRepository = customerRepository;
         _unitOfWork = unitOfWork;
     }
 
@@ -42,6 +45,7 @@ public sealed class PartRequestsController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = "StaffOnly")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<PartRequestDto>>>> GetPartRequests(
         [FromQuery] int? status,
         CancellationToken cancellationToken)
@@ -73,6 +77,7 @@ public sealed class PartRequestsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Policy = "StaffOnly")]
     public async Task<ActionResult<ApiResponse<PartRequestDto>>> GetPartRequest(Guid id, CancellationToken cancellationToken)
     {
         try
@@ -100,6 +105,7 @@ public sealed class PartRequestsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "StaffOnly")]
     public async Task<ActionResult<ApiResponse<PartRequestDto>>> CreatePartRequest(
         [FromBody] CreatePartRequestRequestDto request,
         CancellationToken cancellationToken)
@@ -163,7 +169,74 @@ public sealed class PartRequestsController : ControllerBase
         }
     }
 
+    [HttpPost("customer")]
+    [Authorize(Policy = "CustomerOnly")]
+    public async Task<ActionResult<ApiResponse<PartRequestDto>>> CreateCustomerPartRequest(
+        [FromBody] CreatePartRequestRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var customer = await _customerRepository.Query()
+                .AsNoTracking()
+                .Include(x => x.User)
+                .FirstOrDefaultAsync(x => x.UserId == GetCurrentUserId(), cancellationToken);
+
+            if (customer is null)
+            {
+                return NotFound(ApiResponse<PartRequestDto>.Failure("Customer profile not found.", StatusCodes.Status404NotFound));
+            }
+
+            var part = await _partRepository.GetByIdAsync(request.PartId, cancellationToken);
+            if (part is null)
+            {
+                return NotFound(ApiResponse<PartRequestDto>.Failure("Part not found.", StatusCodes.Status404NotFound));
+            }
+
+            if (request.VendorId.HasValue)
+            {
+                var vendor = await _vendorRepository.GetByIdAsync(request.VendorId.Value, cancellationToken);
+                if (vendor is null)
+                {
+                    return NotFound(ApiResponse<PartRequestDto>.Failure("Vendor not found.", StatusCodes.Status404NotFound));
+                }
+            }
+
+            var partRequest = new PartRequest
+            {
+                RequestNumber = $"PR-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpperInvariant()}",
+                RequestedByStaffId = null,
+                RequestedByCustomerId = customer.Id,
+                PartId = request.PartId,
+                VendorId = request.VendorId,
+                QuantityRequested = request.QuantityRequested,
+                NeededBy = request.NeededBy,
+                Status = PartRequestStatus.Requested,
+                Notes = request.Notes?.Trim() ?? string.Empty
+            };
+
+            await _partRequestRepository.AddAsync(partRequest, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            var created = await _partRequestRepository.Query()
+                .AsNoTracking()
+                .Where(x => x.Id == partRequest.Id)
+                .Include(x => x.RequestedByStaff)
+                    .ThenInclude(x => x!.User)
+                .Include(x => x.Part)
+                .Include(x => x.Vendor)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            return StatusCode(StatusCodes.Status201Created, ApiResponse<PartRequestDto>.Success(PartRequestDto.FromPartRequest(created!), StatusCodes.Status201Created));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure($"Error creating part request: {ex.Message}", StatusCodes.Status500InternalServerError));
+        }
+    }
+
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "StaffOnly")]
     public async Task<ActionResult<ApiResponse<PartRequestDto>>> UpdatePartRequest(
         Guid id,
         [FromBody] UpdatePartRequestRequestDto request,
@@ -225,6 +298,7 @@ public sealed class PartRequestsController : ControllerBase
     }
 
     [HttpPut("{id:guid}/status")]
+    [Authorize(Policy = "StaffOnly")]
     public async Task<ActionResult<ApiResponse<PartRequestDto>>> UpdatePartRequestStatus(
         Guid id,
         [FromBody] UpdatePartRequestStatusRequestDto request,
@@ -282,6 +356,7 @@ public sealed class PartRequestsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "StaffOnly")]
     public async Task<ActionResult<ApiResponse<object?>>> DeletePartRequest(Guid id, CancellationToken cancellationToken)
     {
         try

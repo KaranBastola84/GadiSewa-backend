@@ -9,7 +9,7 @@ public sealed class PartRequestDto
 
     public string RequestNumber { get; init; } = string.Empty;
 
-    public Guid RequestedByStaffId { get; init; }
+    public Guid? RequestedByStaffId { get; init; }
 
     public string RequestedByStaffName { get; init; } = string.Empty;
 
@@ -42,7 +42,9 @@ public sealed class PartRequestDto
             Id = partRequest.Id,
             RequestNumber = partRequest.RequestNumber,
             RequestedByStaffId = partRequest.RequestedByStaffId,
-            RequestedByStaffName = $"{partRequest.RequestedByStaff.User.FirstName} {partRequest.RequestedByStaff.User.LastName}".Trim(),
+            RequestedByStaffName = partRequest.RequestedByStaff?.User is null
+                ? string.Empty
+                : $"{partRequest.RequestedByStaff.User.FirstName} {partRequest.RequestedByStaff.User.LastName}".Trim(),
             PartId = partRequest.PartId,
             PartName = partRequest.Part.Name,
             PartNumber = partRequest.Part.PartNumber,
