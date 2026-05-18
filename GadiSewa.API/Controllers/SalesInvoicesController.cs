@@ -372,6 +372,12 @@ public sealed class SalesInvoicesController : ControllerBase
             await _notificationService.CheckAndNotifyLowStockAsync(
                 items.Where(i => i.PartId.HasValue).Select(i => i.PartId!.Value),
                 cancellationToken);
+            await _notificationService.NotifySaleCreatedAsync(
+                invoice.Id,
+                invoice.InvoiceNumber,
+                invoice.CustomerId,
+                invoice.TotalAmount,
+                cancellationToken);
 
             // Reload for response
             var created = await _salesInvoiceRepository.Query()

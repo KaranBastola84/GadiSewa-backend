@@ -2,18 +2,16 @@ using GadiSewa.Application;
 using GadiSewa.Infrastructure;
 using GadiSewa.Infrastructure.Authentication;
 using GadiSewa.Domain.Enums;
+using GadiSewa.Application.Interfaces.Services;
+using GadiSewa.API.Hubs;
 using GadiSewa.API.Middleware;
+using GadiSewa.API.Realtime;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using Serilog;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Host.UseSerilog((context, services, loggerConfiguration) => loggerConfiguration
-    .ReadFrom.Configuration(context.Configuration)
-    .ReadFrom.Services(services)
-    .Enrich.FromLogContext());
 
 var corsPolicyName = "CorsPolicy";
 var configuredCorsOrigins = builder.Configuration
@@ -84,6 +82,8 @@ builder.Services.AddSwaggerGen(options =>
 });
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSignalR();
+builder.Services.AddScoped<IRealtimeNotificationPublisher, SignalRRealtimeNotificationPublisher>();
 builder.Services.AddTransient<GlobalExceptionMiddleware>();
 
 var jwtOptions = builder.Configuration
@@ -110,6 +110,23 @@ builder.Services
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key)),
             ClockSkew = TimeSpan.Zero
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var requestPath = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrWhiteSpace(accessToken)
+                    && requestPath.StartsWithSegments(NotificationHub.HubRoute))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization(options =>
@@ -122,7 +139,6 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
-app.UseSerilogRequestLogging();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
 app.UseCors(corsPolicyName);
@@ -145,6 +161,7 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapHub<NotificationHub>(NotificationHub.HubRoute);
 app.MapControllers();
 
 app.Run();
