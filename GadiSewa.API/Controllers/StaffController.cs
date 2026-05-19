@@ -16,7 +16,7 @@ namespace GadiSewa.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Policy = "AdminOnly")]
+[Authorize(Policy = "BackOfficeOnly")]
 public sealed class StaffController : ControllerBase
 {
     private readonly IUserRepository _userRepository;
@@ -84,6 +84,7 @@ public sealed class StaffController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     [SwaggerOperation(
         Summary = "Update staff member details",
         Description = "Updates the details of a specific staff member.")]
@@ -121,6 +122,7 @@ public sealed class StaffController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     [SwaggerOperation(
         Summary = "Deactivate/delete a staff member",
         Description = "Deactivates a staff member account by setting IsActive to false. This is a soft delete.")]

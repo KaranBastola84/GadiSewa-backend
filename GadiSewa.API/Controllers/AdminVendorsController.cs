@@ -9,7 +9,7 @@ namespace GadiSewa.API.Controllers;
 
 [ApiController]
 [Route("api/admin/vendors")]
-[Authorize(Policy = "AdminOnly")]
+[Authorize(Policy = "BackOfficeOnly")]
 public sealed class AdminVendorsController : ControllerBase
 {
     private readonly IRepository<Vendor> _vendorRepository;
@@ -47,6 +47,7 @@ public sealed class AdminVendorsController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<ApiResponse<VendorDto>>> CreateVendor([FromBody] CreateVendorRequestDto request, CancellationToken cancellationToken)
     {
         var existingEmail = await _vendorRepository.ListAsync(x => x.Email == request.Email.Trim().ToLowerInvariant(), cancellationToken);
@@ -71,6 +72,7 @@ public sealed class AdminVendorsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<ApiResponse<VendorDto>>> UpdateVendor(Guid id, [FromBody] UpdateVendorRequestDto request, CancellationToken cancellationToken)
     {
         var vendor = await _vendorRepository.GetByIdAsync(id, cancellationToken);
@@ -99,6 +101,7 @@ public sealed class AdminVendorsController : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<ActionResult<ApiResponse<object?>>> DeleteVendor(Guid id, CancellationToken cancellationToken)
     {
         var vendor = await _vendorRepository.GetByIdAsync(id, cancellationToken);
