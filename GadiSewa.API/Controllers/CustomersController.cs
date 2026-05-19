@@ -449,6 +449,86 @@ public sealed class CustomersController : ControllerBase
         return Ok(ApiResponse<IReadOnlyList<CustomerVehicleDto>>.Success(dtos));
     }
 
+    [HttpGet("me")]
+    public async Task<ActionResult<ApiResponse<CustomerSearchResultDto>>> GetMyCustomer(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+
+        var customer = await _customerRepository.Query()
+            .AsNoTracking()
+            .Include(c => c.User)
+            .Include(c => c.Vehicles)
+            .Include(c => c.Appointments)
+            .Include(c => c.Reviews)
+            .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
+
+        if (customer is null)
+        {
+            return NotFound(ApiResponse<CustomerSearchResultDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
+        }
+
+        var dto = new CustomerSearchResultDto
+        {
+            CustomerId = customer.Id,
+            UserId = customer.UserId,
+            FirstName = customer.User.FirstName,
+            LastName = customer.User.LastName,
+            Email = customer.User.Email,
+            PhoneNumber = customer.User.PhoneNumber,
+            Address = customer.Address,
+            LoyaltyPoints = customer.LoyaltyPoints,
+            VehicleCount = customer.Vehicles?.Count ?? 0,
+            AppointmentCount = customer.Appointments?.Count ?? 0,
+            ReviewCount = customer.Reviews?.Count ?? 0,
+            IsActive = customer.User.IsActive,
+            Vehicles = customer.Vehicles?.Select(v => new CustomerVehicleDto
+            {
+                VehicleId = v.Id,
+                RegistrationNumber = v.RegistrationNumber,
+                Make = v.Make,
+                Model = v.Model,
+                Year = v.Year,
+                Color = v.Color
+            }).ToList() ?? new List<CustomerVehicleDto>()
+        };
+
+        return Ok(ApiResponse<CustomerSearchResultDto>.Success(dto));
+    }
+
+    [HttpGet("me/vehicles")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CustomerVehicleDto>>>> GetMyVehicles(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        var customerId = await _customerRepository.Query()
+            .Where(c => c.UserId == userId)
+            .Select(c => c.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (customerId == Guid.Empty)
+        {
+            return NotFound(ApiResponse<IReadOnlyList<CustomerVehicleDto>>.Failure("Customer not found.", StatusCodes.Status404NotFound));
+        }
+
+        return await GetCustomerVehicles(customerId, cancellationToken);
+    }
+
+    [HttpGet("me/credit-history")]
+    public async Task<ActionResult<ApiResponse<CustomerCreditHistoryDto>>> GetMyCreditHistory(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        var customerId = await _customerRepository.Query()
+            .Where(c => c.UserId == userId)
+            .Select(c => c.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (customerId == Guid.Empty)
+        {
+            return NotFound(ApiResponse<CustomerCreditHistoryDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
+        }
+
+        return await GetCustomerCreditHistory(customerId, cancellationToken);
+    }
+
     [HttpPost("{id:guid}/vehicles")]
     public async Task<ActionResult<ApiResponse<CustomerVehicleDto>>> AddVehicleToCustomer(Guid id, [FromBody] CreateVehicleRequestDto request, CancellationToken cancellationToken)
     {
