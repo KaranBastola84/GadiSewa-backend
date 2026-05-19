@@ -55,7 +55,7 @@ public sealed class PartRequestsController : ControllerBase
             IQueryable<PartRequest> query = _partRequestRepository.Query()
                 .AsNoTracking()
                 .Include(x => x.RequestedByStaff)
-                    .ThenInclude(x => x.User)
+                    .ThenInclude(x => x!.User)
                 .Include(x => x.Part)
                 .Include(x => x.Vendor);
 
@@ -86,7 +86,7 @@ public sealed class PartRequestsController : ControllerBase
                 .AsNoTracking()
                 .Where(x => x.Id == id)
                 .Include(x => x.RequestedByStaff)
-                    .ThenInclude(x => x.User)
+                    .ThenInclude(x => x!.User)
                 .Include(x => x.Part)
                 .Include(x => x.Vendor)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -156,7 +156,7 @@ public sealed class PartRequestsController : ControllerBase
                 .AsNoTracking()
                 .Where(x => x.Id == partRequest.Id)
                 .Include(x => x.RequestedByStaff)
-                    .ThenInclude(x => x.User)
+                    .ThenInclude(x => x!.User)
                 .Include(x => x.Part)
                 .Include(x => x.Vendor)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -284,7 +284,7 @@ public sealed class PartRequestsController : ControllerBase
                 .AsNoTracking()
                 .Where(x => x.Id == id)
                 .Include(x => x.RequestedByStaff)
-                    .ThenInclude(x => x.User)
+                    .ThenInclude(x => x!.User)
                 .Include(x => x.Part)
                 .Include(x => x.Vendor)
                 .FirstOrDefaultAsync(cancellationToken);
@@ -342,7 +342,7 @@ public sealed class PartRequestsController : ControllerBase
                 .AsNoTracking()
                 .Where(x => x.Id == id)
                 .Include(x => x.RequestedByStaff)
-                    .ThenInclude(x => x.User)
+                    .ThenInclude(x => x!.User)
                 .Include(x => x.Part)
                 .Include(x => x.Vendor)
                 .FirstOrDefaultAsync(cancellationToken);
