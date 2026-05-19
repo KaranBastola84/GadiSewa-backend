@@ -115,6 +115,179 @@ public sealed class CustomersController : ControllerBase
         return Ok(ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Success(dtos));
     }
 
+    [HttpGet("me")]
+    public async Task<ActionResult<ApiResponse<CustomerSearchResultDto>>> GetMyCustomer(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+
+        var customer = await _customerRepository.Query()
+            .AsNoTracking()
+            .Include(c => c.User)
+            .Include(c => c.Vehicles)
+            .Include(c => c.Appointments)
+            .Include(c => c.Reviews)
+            .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
+
+        if (customer is null)
+        {
+            var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+            if (user is not null && user.Role == UserRole.Customer)
+            {
+                var newCustomer = new Customer
+                {
+                    UserId = userId,
+                    Address = string.Empty,
+                    LoyaltyPoints = 0,
+                    TotalSpent = 0
+                };
+                await _customerRepository.AddAsync(newCustomer, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                customer = await _customerRepository.Query()
+                    .AsNoTracking()
+                    .Include(c => c.User)
+                    .Include(c => c.Vehicles)
+                    .Include(c => c.Appointments)
+                    .Include(c => c.Reviews)
+                    .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
+            }
+        }
+
+        if (customer is null)
+        {
+            return NotFound(ApiResponse<CustomerSearchResultDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
+        }
+
+        var dto = new CustomerSearchResultDto
+        {
+            CustomerId = customer.Id,
+            UserId = customer.UserId,
+            FirstName = customer.User.FirstName,
+            LastName = customer.User.LastName,
+            Email = customer.User.Email,
+            PhoneNumber = customer.User.PhoneNumber,
+            Address = customer.Address,
+            LoyaltyPoints = customer.LoyaltyPoints,
+            VehicleCount = customer.Vehicles?.Count ?? 0,
+            AppointmentCount = customer.Appointments?.Count ?? 0,
+            ReviewCount = customer.Reviews?.Count ?? 0,
+            IsActive = customer.User.IsActive,
+            Vehicles = customer.Vehicles?.Select(v => new CustomerVehicleDto
+            {
+                VehicleId = v.Id,
+                RegistrationNumber = v.RegistrationNumber,
+                Make = v.Make,
+                Model = v.Model,
+                Year = v.Year,
+                Color = v.Color
+            }).ToList() ?? new List<CustomerVehicleDto>()
+        };
+
+        return Ok(ApiResponse<CustomerSearchResultDto>.Success(dto));
+    }
+
+    [HttpGet("me/vehicles")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CustomerVehicleDto>>>> GetMyVehicles(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        var customerId = await _customerRepository.Query()
+            .Where(c => c.UserId == userId)
+            .Select(c => c.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (customerId == Guid.Empty)
+        {
+            return NotFound(ApiResponse<IReadOnlyList<CustomerVehicleDto>>.Failure("Customer not found.", StatusCodes.Status404NotFound));
+        }
+
+        return await GetCustomerVehicles(customerId, cancellationToken);
+    }
+
+    [HttpGet("me/credit-history")]
+    public async Task<ActionResult<ApiResponse<CustomerCreditHistoryDto>>> GetMyCreditHistory(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        var customerId = await _customerRepository.Query()
+            .Where(c => c.UserId == userId)
+            .Select(c => c.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (customerId == Guid.Empty)
+        {
+            return NotFound(ApiResponse<CustomerCreditHistoryDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
+        }
+
+        return await GetCustomerCreditHistory(customerId, cancellationToken);
+    }
+
+    [HttpGet("search")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<CustomerSearchResultDto>>>> SearchCustomers(
+        [FromQuery] string? q,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        // Allow staff/admin search; customers cannot search other customers
+        var role = GetCurrentUserRole();
+        if (role == UserRole.Customer.ToString()) return Forbid();
+
+        if (pageNumber < 1) pageNumber = 1;
+        if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+        IQueryable<Customer> customersQuery = _customerRepository.Query()
+            .AsNoTracking()
+            .Include(c => c.User)
+            .Include(c => c.Vehicles)
+            .Include(c => c.Appointments)
+            .Include(c => c.Reviews);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var searchTerm = q.Trim().ToLowerInvariant();
+            customersQuery = customersQuery.Where(c =>
+                c.User.FirstName.ToLower().Contains(searchTerm) ||
+                c.User.LastName.ToLower().Contains(searchTerm) ||
+                c.User.Email.ToLower().Contains(searchTerm) ||
+                c.User.PhoneNumber.Contains(searchTerm) ||
+                c.Vehicles.Any(v => v.RegistrationNumber.ToLower().Contains(searchTerm)) ||
+                c.Id.ToString().StartsWith(searchTerm));
+        }
+
+        var results = await customersQuery
+            .OrderBy(c => c.User.LastName)
+            .ThenBy(c => c.User.FirstName)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        var dtos = results.Select(c => new CustomerSearchResultDto
+        {
+            CustomerId = c.Id,
+            UserId = c.UserId,
+            FirstName = c.User.FirstName,
+            LastName = c.User.LastName,
+            Email = c.User.Email,
+            PhoneNumber = c.User.PhoneNumber,
+            Address = c.Address,
+            LoyaltyPoints = c.LoyaltyPoints,
+            VehicleCount = c.Vehicles.Count,
+            AppointmentCount = c.Appointments.Count,
+            ReviewCount = c.Reviews.Count,
+            IsActive = c.User.IsActive,
+            Vehicles = c.Vehicles.Select(v => new CustomerVehicleDto
+            {
+                VehicleId = v.Id,
+                RegistrationNumber = v.RegistrationNumber,
+                Make = v.Make,
+                Model = v.Model,
+                Year = v.Year,
+                Color = v.Color
+            }).ToList()
+        }).ToList();
+
+        return Ok(ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Success(dtos));
+    }
+
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<CustomerSearchResultDto>>> GetCustomerById(Guid id, CancellationToken cancellationToken)
     {
@@ -355,74 +528,6 @@ public sealed class CustomersController : ControllerBase
         return Ok(ApiResponse<object?>.Success(null));
     }
 
-    [HttpGet("search")]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<CustomerSearchResultDto>>>> SearchCustomers(
-        [FromQuery] string? q,
-        [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20,
-        CancellationToken cancellationToken = default)
-    {
-        // Allow staff/admin search; customers cannot search other customers
-        var role = GetCurrentUserRole();
-        if (role == UserRole.Customer.ToString()) return Forbid();
-
-        if (pageNumber < 1) pageNumber = 1;
-        if (pageSize < 1 || pageSize > 100) pageSize = 20;
-
-        IQueryable<Customer> customersQuery = _customerRepository.Query()
-            .AsNoTracking()
-            .Include(c => c.User)
-            .Include(c => c.Vehicles)
-            .Include(c => c.Appointments)
-            .Include(c => c.Reviews);
-
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var searchTerm = q.Trim().ToLowerInvariant();
-            customersQuery = customersQuery.Where(c =>
-                c.User.FirstName.ToLower().Contains(searchTerm) ||
-                c.User.LastName.ToLower().Contains(searchTerm) ||
-                c.User.Email.ToLower().Contains(searchTerm) ||
-                c.User.PhoneNumber.Contains(searchTerm) ||
-                c.Vehicles.Any(v => v.RegistrationNumber.ToLower().Contains(searchTerm)) ||
-                c.Id.ToString().StartsWith(searchTerm));
-        }
-
-        var results = await customersQuery
-            .OrderBy(c => c.User.LastName)
-            .ThenBy(c => c.User.FirstName)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(cancellationToken);
-
-        var dtos = results.Select(c => new CustomerSearchResultDto
-        {
-            CustomerId = c.Id,
-            UserId = c.UserId,
-            FirstName = c.User.FirstName,
-            LastName = c.User.LastName,
-            Email = c.User.Email,
-            PhoneNumber = c.User.PhoneNumber,
-            Address = c.Address,
-            LoyaltyPoints = c.LoyaltyPoints,
-            VehicleCount = c.Vehicles.Count,
-            AppointmentCount = c.Appointments.Count,
-            ReviewCount = c.Reviews.Count,
-            IsActive = c.User.IsActive,
-            Vehicles = c.Vehicles.Select(v => new CustomerVehicleDto
-            {
-                VehicleId = v.Id,
-                RegistrationNumber = v.RegistrationNumber,
-                Make = v.Make,
-                Model = v.Model,
-                Year = v.Year,
-                Color = v.Color
-            }).ToList()
-        }).ToList();
-
-        return Ok(ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Success(dtos));
-    }
-
     [HttpGet("{id:guid}/vehicles")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<CustomerVehicleDto>>>> GetCustomerVehicles(Guid id, CancellationToken cancellationToken)
     {
@@ -447,86 +552,6 @@ public sealed class CustomersController : ControllerBase
         }).ToList();
 
         return Ok(ApiResponse<IReadOnlyList<CustomerVehicleDto>>.Success(dtos));
-    }
-
-    [HttpGet("me")]
-    public async Task<ActionResult<ApiResponse<CustomerSearchResultDto>>> GetMyCustomer(CancellationToken cancellationToken)
-    {
-        var userId = GetCurrentUserId();
-
-        var customer = await _customerRepository.Query()
-            .AsNoTracking()
-            .Include(c => c.User)
-            .Include(c => c.Vehicles)
-            .Include(c => c.Appointments)
-            .Include(c => c.Reviews)
-            .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
-
-        if (customer is null)
-        {
-            return NotFound(ApiResponse<CustomerSearchResultDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
-        }
-
-        var dto = new CustomerSearchResultDto
-        {
-            CustomerId = customer.Id,
-            UserId = customer.UserId,
-            FirstName = customer.User.FirstName,
-            LastName = customer.User.LastName,
-            Email = customer.User.Email,
-            PhoneNumber = customer.User.PhoneNumber,
-            Address = customer.Address,
-            LoyaltyPoints = customer.LoyaltyPoints,
-            VehicleCount = customer.Vehicles?.Count ?? 0,
-            AppointmentCount = customer.Appointments?.Count ?? 0,
-            ReviewCount = customer.Reviews?.Count ?? 0,
-            IsActive = customer.User.IsActive,
-            Vehicles = customer.Vehicles?.Select(v => new CustomerVehicleDto
-            {
-                VehicleId = v.Id,
-                RegistrationNumber = v.RegistrationNumber,
-                Make = v.Make,
-                Model = v.Model,
-                Year = v.Year,
-                Color = v.Color
-            }).ToList() ?? new List<CustomerVehicleDto>()
-        };
-
-        return Ok(ApiResponse<CustomerSearchResultDto>.Success(dto));
-    }
-
-    [HttpGet("me/vehicles")]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<CustomerVehicleDto>>>> GetMyVehicles(CancellationToken cancellationToken)
-    {
-        var userId = GetCurrentUserId();
-        var customerId = await _customerRepository.Query()
-            .Where(c => c.UserId == userId)
-            .Select(c => c.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (customerId == Guid.Empty)
-        {
-            return NotFound(ApiResponse<IReadOnlyList<CustomerVehicleDto>>.Failure("Customer not found.", StatusCodes.Status404NotFound));
-        }
-
-        return await GetCustomerVehicles(customerId, cancellationToken);
-    }
-
-    [HttpGet("me/credit-history")]
-    public async Task<ActionResult<ApiResponse<CustomerCreditHistoryDto>>> GetMyCreditHistory(CancellationToken cancellationToken)
-    {
-        var userId = GetCurrentUserId();
-        var customerId = await _customerRepository.Query()
-            .Where(c => c.UserId == userId)
-            .Select(c => c.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (customerId == Guid.Empty)
-        {
-            return NotFound(ApiResponse<CustomerCreditHistoryDto>.Failure("Customer not found.", StatusCodes.Status404NotFound));
-        }
-
-        return await GetCustomerCreditHistory(customerId, cancellationToken);
     }
 
     [HttpPost("{id:guid}/vehicles")]

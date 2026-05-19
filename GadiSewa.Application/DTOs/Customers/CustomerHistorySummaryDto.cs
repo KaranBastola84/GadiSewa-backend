@@ -81,6 +81,8 @@ public sealed class SalesInvoiceHistoryItemDto
     public decimal AmountPaid { get; init; }
 
     public decimal AmountDue { get; init; }
+
+    public Guid? AppointmentId { get; init; }
 }
 
 public sealed class SalesInvoiceItemDetailDto

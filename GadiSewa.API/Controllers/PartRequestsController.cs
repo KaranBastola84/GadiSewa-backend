@@ -45,19 +45,36 @@ public sealed class PartRequestsController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Policy = "StaffOnly")]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<PartRequestDto>>>> GetPartRequests(
         [FromQuery] int? status,
         CancellationToken cancellationToken)
     {
         try
         {
+            var role = User.FindFirstValue(ClaimTypes.Role);
+            var userId = GetCurrentUserId();
+
             IQueryable<PartRequest> query = _partRequestRepository.Query()
                 .AsNoTracking()
                 .Include(x => x.RequestedByStaff)
                     .ThenInclude(x => x!.User)
+                .Include(x => x.RequestedByCustomer)
+                    .ThenInclude(x => x!.User)
                 .Include(x => x.Part)
                 .Include(x => x.Vendor);
+
+            if (role == UserRole.Customer.ToString())
+            {
+                var customer = await _customerRepository.Query()
+                    .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
+                
+                if (customer is null)
+                {
+                    return NotFound(ApiResponse<IReadOnlyList<PartRequestDto>>.Failure("Customer profile not found.", StatusCodes.Status404NotFound));
+                }
+
+                query = query.Where(x => x.RequestedByCustomerId == customer.Id);
+            }
 
             if (status.HasValue && Enum.IsDefined(typeof(PartRequestStatus), status))
             {
@@ -77,15 +94,19 @@ public sealed class PartRequestsController : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
-    [Authorize(Policy = "StaffOnly")]
     public async Task<ActionResult<ApiResponse<PartRequestDto>>> GetPartRequest(Guid id, CancellationToken cancellationToken)
     {
         try
         {
+            var role = User.FindFirstValue(ClaimTypes.Role);
+            var userId = GetCurrentUserId();
+
             var partRequest = await _partRequestRepository.Query()
                 .AsNoTracking()
                 .Where(x => x.Id == id)
                 .Include(x => x.RequestedByStaff)
+                    .ThenInclude(x => x!.User)
+                .Include(x => x.RequestedByCustomer)
                     .ThenInclude(x => x!.User)
                 .Include(x => x.Part)
                 .Include(x => x.Vendor)
@@ -94,6 +115,17 @@ public sealed class PartRequestsController : ControllerBase
             if (partRequest is null)
             {
                 return NotFound(ApiResponse<PartRequestDto>.Failure("Part request not found.", StatusCodes.Status404NotFound));
+            }
+
+            if (role == UserRole.Customer.ToString())
+            {
+                var customer = await _customerRepository.Query()
+                    .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
+
+                if (customer is null || partRequest.RequestedByCustomerId != customer.Id)
+                {
+                    return Forbid();
+                }
             }
 
             return Ok(ApiResponse<PartRequestDto>.Success(PartRequestDto.FromPartRequest(partRequest)));
@@ -172,7 +204,7 @@ public sealed class PartRequestsController : ControllerBase
     [HttpPost("customer")]
     [Authorize(Policy = "CustomerOnly")]
     public async Task<ActionResult<ApiResponse<PartRequestDto>>> CreateCustomerPartRequest(
-        [FromBody] CreatePartRequestRequestDto request,
+        [FromBody] CreateCustomerPartRequestDto request,
         CancellationToken cancellationToken)
     {
         try
@@ -187,19 +219,29 @@ public sealed class PartRequestsController : ControllerBase
                 return NotFound(ApiResponse<PartRequestDto>.Failure("Customer profile not found.", StatusCodes.Status404NotFound));
             }
 
-            var part = await _partRepository.GetByIdAsync(request.PartId, cancellationToken);
-            if (part is null)
+            if (string.IsNullOrWhiteSpace(request.PartName))
             {
-                return NotFound(ApiResponse<PartRequestDto>.Failure("Part not found.", StatusCodes.Status404NotFound));
+                return BadRequest(ApiResponse<PartRequestDto>.Failure("Part name is required.", StatusCodes.Status400BadRequest));
             }
 
-            if (request.VendorId.HasValue)
+            // Find existing part or create dynamic temp Part
+            var part = await _partRepository.Query()
+                .FirstOrDefaultAsync(p => p.Name.ToLower() == request.PartName.Trim().ToLower(), cancellationToken);
+
+            if (part is null)
             {
-                var vendor = await _vendorRepository.GetByIdAsync(request.VendorId.Value, cancellationToken);
-                if (vendor is null)
+                part = new Part
                 {
-                    return NotFound(ApiResponse<PartRequestDto>.Failure("Vendor not found.", StatusCodes.Status404NotFound));
-                }
+                    Name = request.PartName.Trim(),
+                    PartNumber = $"TEMP-PR-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpperInvariant()}",
+                    Description = $"Dynamically created for customer request (Vehicle: {request.VehicleModel})",
+                    UnitPrice = 0,
+                    StockQuantity = 0,
+                    ReorderLevel = 0,
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+                await _partRepository.AddAsync(part, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
             }
 
             var partRequest = new PartRequest
@@ -207,12 +249,12 @@ public sealed class PartRequestsController : ControllerBase
                 RequestNumber = $"PR-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpperInvariant()}",
                 RequestedByStaffId = null,
                 RequestedByCustomerId = customer.Id,
-                PartId = request.PartId,
-                VendorId = request.VendorId,
-                QuantityRequested = request.QuantityRequested,
-                NeededBy = request.NeededBy,
+                PartId = part.Id,
+                VendorId = null,
+                QuantityRequested = 1,
+                NeededBy = DateTimeOffset.UtcNow.AddDays(7), // Default: needed in 7 days
                 Status = PartRequestStatus.Requested,
-                Notes = request.Notes?.Trim() ?? string.Empty
+                Notes = $"Vehicle: {request.VehicleModel} | Brand: {request.Brand} | Urgency: {request.Urgency} | Notes: {request.Notes}"
             };
 
             await _partRequestRepository.AddAsync(partRequest, cancellationToken);
@@ -222,6 +264,8 @@ public sealed class PartRequestsController : ControllerBase
                 .AsNoTracking()
                 .Where(x => x.Id == partRequest.Id)
                 .Include(x => x.RequestedByStaff)
+                    .ThenInclude(x => x!.User)
+                .Include(x => x.RequestedByCustomer)
                     .ThenInclude(x => x!.User)
                 .Include(x => x.Part)
                 .Include(x => x.Vendor)

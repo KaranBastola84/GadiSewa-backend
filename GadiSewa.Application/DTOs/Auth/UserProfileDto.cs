@@ -7,6 +7,8 @@ public sealed class UserProfileDto
 {
     public Guid UserId { get; init; }
 
+    public Guid? CustomerId { get; init; }
+
     public string FirstName { get; init; } = string.Empty;
 
     public string LastName { get; init; } = string.Empty;
@@ -23,11 +25,12 @@ public sealed class UserProfileDto
 
     public DateTimeOffset? LastLoginAt { get; init; }
 
-    public static UserProfileDto FromUser(User user)
+    public static UserProfileDto FromUser(User user, Guid? customerId = null)
     {
         return new UserProfileDto
         {
             UserId = user.Id,
+            CustomerId = customerId,
             FirstName = user.FirstName,
             LastName = user.LastName,
             Email = user.Email,

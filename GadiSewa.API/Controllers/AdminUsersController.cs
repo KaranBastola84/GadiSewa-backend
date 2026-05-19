@@ -77,7 +77,7 @@ public sealed class AdminUsersController : ControllerBase
     public async Task<ActionResult<ApiResponse<IReadOnlyList<UserProfileDto>>>> GetUsers(CancellationToken cancellationToken)
     {
         var users = await _userRepository.ListAsync(cancellationToken: cancellationToken);
-        var result = users.Select(UserProfileDto.FromUser).ToList();
+        var result = users.Select(u => UserProfileDto.FromUser(u, null)).ToList();
         return Ok(ApiResponse<IReadOnlyList<UserProfileDto>>.Success(result));
     }
 

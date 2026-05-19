@@ -7,6 +7,8 @@ public sealed class AuthResponseDto
 {
     public Guid UserId { get; init; }
 
+    public Guid? CustomerId { get; init; }
+
     public string FullName { get; init; } = string.Empty;
 
     public string Email { get; init; } = string.Empty;
@@ -19,11 +21,12 @@ public sealed class AuthResponseDto
 
     public bool RequiresEmailVerification { get; init; }
 
-    public static AuthResponseDto FromUser(User user, string token, string refreshToken, bool requiresEmailVerification = false)
+    public static AuthResponseDto FromUser(User user, string token, string refreshToken, bool requiresEmailVerification = false, Guid? customerId = null)
     {
         return new AuthResponseDto
         {
             UserId = user.Id,
+            CustomerId = customerId,
             FullName = $"{user.FirstName} {user.LastName}".Trim(),
             Email = user.Email,
             Role = user.Role,

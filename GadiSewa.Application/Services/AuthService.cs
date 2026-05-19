@@ -4,6 +4,7 @@ using GadiSewa.Application.Interfaces.Persistence;
 using GadiSewa.Application.Interfaces.Services;
 using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -12,6 +13,7 @@ namespace GadiSewa.Application.Services;
 public sealed class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
+    private readonly IRepository<Customer> _customerRepository;
     private readonly IRepository<EmailVerificationToken> _emailVerificationTokenRepository;
     private readonly IRepository<PasswordResetToken> _passwordResetTokenRepository;
     private readonly IRepository<RefreshToken> _refreshTokenRepository;
@@ -22,6 +24,7 @@ public sealed class AuthService : IAuthService
 
     public AuthService(
         IUserRepository userRepository,
+        IRepository<Customer> customerRepository,
         IRepository<EmailVerificationToken> emailVerificationTokenRepository,
         IRepository<PasswordResetToken> passwordResetTokenRepository,
         IRepository<RefreshToken> refreshTokenRepository,
@@ -31,6 +34,7 @@ public sealed class AuthService : IAuthService
         IEmailService emailService)
     {
         _userRepository = userRepository;
+        _customerRepository = customerRepository;
         _emailVerificationTokenRepository = emailVerificationTokenRepository;
         _passwordResetTokenRepository = passwordResetTokenRepository;
         _refreshTokenRepository = refreshTokenRepository;
@@ -70,7 +74,9 @@ public sealed class AuthService : IAuthService
 
         await _emailService.SendEmailVerificationEmailAsync(user.Email, $"{user.FirstName} {user.LastName}".Trim(), verificationToken, cancellationToken);
 
-        return AuthResponseDto.FromUser(user, string.Empty, string.Empty, requiresEmailVerification: true);
+        var createdCustomerId = await GetCustomerIdByUserIdAsync(user.Id, cancellationToken);
+
+        return AuthResponseDto.FromUser(user, string.Empty, string.Empty, requiresEmailVerification: true, customerId: createdCustomerId == Guid.Empty ? null : createdCustomerId);
     }
 
     public async Task<AuthResponseDto> LoginAsync(
@@ -102,7 +108,10 @@ public sealed class AuthService : IAuthService
 
         var token = _jwtTokenGenerator.GenerateToken(user);
         var refreshToken = await CreateRefreshTokenAsync(user, cancellationToken);
-        return AuthResponseDto.FromUser(user, token, refreshToken);
+
+        var customerId = await GetCustomerIdByUserIdAsync(user.Id, cancellationToken);
+
+        return AuthResponseDto.FromUser(user, token, refreshToken, customerId: customerId == Guid.Empty ? null : customerId);
     }
 
     public async Task VerifyEmailAsync(VerifyEmailRequestDto request, CancellationToken cancellationToken = default)
@@ -191,7 +200,10 @@ public sealed class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         var accessToken = _jwtTokenGenerator.GenerateToken(user);
-        return AuthResponseDto.FromUser(user, accessToken, newRefreshToken);
+
+        var customerId = await GetCustomerIdByUserIdAsync(user.Id, cancellationToken);
+
+        return AuthResponseDto.FromUser(user, accessToken, newRefreshToken, customerId: customerId == Guid.Empty ? null : customerId);
     }
 
     public async Task LogoutAsync(RefreshTokenRequestDto request, CancellationToken cancellationToken = default)
@@ -220,7 +232,15 @@ public sealed class AuthService : IAuthService
             throw new NotFoundException("User not found.");
         }
 
-        return UserProfileDto.FromUser(user);
+        Guid? customerId = null;
+        if (user.Role == UserRole.Customer)
+        {
+            var customer = await _customerRepository.Query()
+                .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
+            customerId = customer?.Id;
+        }
+
+        return UserProfileDto.FromUser(user, customerId);
     }
 
     public async Task<UserProfileDto> UpdateProfileAsync(Guid userId, UpdateProfileRequestDto request, CancellationToken cancellationToken = default)
@@ -239,7 +259,15 @@ public sealed class AuthService : IAuthService
         _userRepository.Update(user);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return UserProfileDto.FromUser(user);
+        Guid? customerId = null;
+        if (user.Role == UserRole.Customer)
+        {
+            var customer = await _customerRepository.Query()
+                .FirstOrDefaultAsync(c => c.UserId == userId, cancellationToken);
+            customerId = customer?.Id;
+        }
+
+        return UserProfileDto.FromUser(user, customerId);
     }
 
     public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequestDto request, CancellationToken cancellationToken = default)
@@ -361,5 +389,32 @@ public sealed class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return refreshToken;
+    }
+
+    private async Task<Guid> GetCustomerIdByUserIdAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var customers = await _customerRepository.ListAsync(c => c.UserId == userId, cancellationToken);
+        var customer = customers.FirstOrDefault();
+        if (customer is not null)
+        {
+            return customer.Id;
+        }
+
+        var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user is not null && user.Role == UserRole.Customer)
+        {
+            var newCustomer = new Customer
+            {
+                UserId = userId,
+                Address = string.Empty,
+                LoyaltyPoints = 0,
+                TotalSpent = 0
+            };
+            await _customerRepository.AddAsync(newCustomer, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return newCustomer.Id;
+        }
+
+        return Guid.Empty;
     }
 }

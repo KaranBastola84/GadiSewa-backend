@@ -151,7 +151,8 @@ public sealed class CustomerHistoryController : ControllerBase
                             LineTotal = it.LineTotal
                         }).ToList(),
                         AmountPaid = creditPayments.Where(cp => cp.SalesInvoiceId == i.Id).Sum(cp => cp.Amount),
-                        AmountDue = i.TotalAmount - creditPayments.Where(cp => cp.SalesInvoiceId == i.Id).Sum(cp => cp.Amount)
+                        AmountDue = i.TotalAmount - creditPayments.Where(cp => cp.SalesInvoiceId == i.Id).Sum(cp => cp.Amount),
+                        AppointmentId = i.AppointmentId
                     })
                     .ToList()
             };
