@@ -9,6 +9,7 @@ using GadiSewa.API.Middleware;
 using GadiSewa.API.Realtime;
 using GadiSewa.Infrastructure.BackgroundJobs;
 using Hangfire;
+using Npgsql;
 using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -99,8 +100,10 @@ if (string.IsNullOrWhiteSpace(hangfireConnectionString))
 builder.Services.AddHangfire(configuration => configuration
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UsePostgreSqlStorage(hangfireConnectionString));
-
+    .UsePostgreSqlStorage(hangfireConnectionString, new PostgreSqlStorageOptions
+    {
+        SchemaName = "hangfire"
+    }));
 builder.Services.AddHangfireServer();
 
 var jwtOptions = builder.Configuration
@@ -178,10 +181,15 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.UseHangfireDashboard("/hangfire", new DashboardOptions
+if (app.Environment.IsDevelopment())
 {
-    Authorization = [new HangfireDashboardAuthorizationFilter()]
-});
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = app.Environment.IsDevelopment()
+        ? []
+        : [new HangfireDashboardAuthorizationFilter()]
+    });
+}
 
 RecurringJob.AddOrUpdate<OverdueCreditReminderJob>(
     "overdue-credit-reminder",
