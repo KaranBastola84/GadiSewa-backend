@@ -2,7 +2,15 @@ using GadiSewa.Application;
 using GadiSewa.Infrastructure;
 using GadiSewa.Infrastructure.Authentication;
 using GadiSewa.Domain.Enums;
+using GadiSewa.Application.Interfaces.Services;
+using GadiSewa.API.Hangfire;
+using GadiSewa.API.Hubs;
 using GadiSewa.API.Middleware;
+using GadiSewa.API.Realtime;
+using GadiSewa.Infrastructure.BackgroundJobs;
+using Hangfire;
+using Npgsql;
+using Hangfire.PostgreSql;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -79,7 +87,24 @@ builder.Services.AddSwaggerGen(options =>
 });
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSignalR();
+builder.Services.AddScoped<IRealtimeNotificationPublisher, SignalRRealtimeNotificationPublisher>();
 builder.Services.AddTransient<GlobalExceptionMiddleware>();
+
+var hangfireConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(hangfireConnectionString))
+{
+    throw new InvalidOperationException("DefaultConnection is missing for Hangfire.");
+}
+
+builder.Services.AddHangfire(configuration => configuration
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UsePostgreSqlStorage(hangfireConnectionString, new PostgreSqlStorageOptions
+    {
+        SchemaName = "hangfire"
+    }));
+builder.Services.AddHangfireServer();
 
 var jwtOptions = builder.Configuration
     .GetSection(JwtOptions.SectionName)
@@ -104,6 +129,23 @@ builder.Services
             ValidAudience = jwtOptions.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key)),
             ClockSkew = TimeSpan.Zero
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var requestPath = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrWhiteSpace(accessToken)
+                    && requestPath.StartsWithSegments(NotificationHub.HubRoute))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
         };
     });
 
@@ -139,6 +181,27 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
+if (app.Environment.IsDevelopment())
+{
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = app.Environment.IsDevelopment()
+        ? []
+        : [new HangfireDashboardAuthorizationFilter()]
+    });
+}
+
+RecurringJob.AddOrUpdate<OverdueCreditReminderJob>(
+    "overdue-credit-reminder",
+    job => job.RunAsync(),
+    Cron.Daily);
+
+RecurringJob.AddOrUpdate<LowStockAlertJob>(
+    "low-stock-alerts",
+    job => job.RunAsync(),
+    Cron.Hourly);
+
+app.MapHub<NotificationHub>(NotificationHub.HubRoute);
 app.MapControllers();
 
 app.Run();

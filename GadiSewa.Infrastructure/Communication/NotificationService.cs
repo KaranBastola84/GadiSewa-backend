@@ -14,6 +14,7 @@ public sealed class NotificationService : INotificationService
     private readonly IUserRepository _userRepository;
     private readonly IRepository<NotificationLog> _notificationLogRepository;
     private readonly IEmailService _emailService;
+    private readonly IRealtimeNotificationPublisher _realtimeNotificationPublisher;
     private readonly IUnitOfWork _unitOfWork;
 
     public NotificationService(
@@ -21,12 +22,14 @@ public sealed class NotificationService : INotificationService
         IUserRepository userRepository,
         IRepository<NotificationLog> notificationLogRepository,
         IEmailService emailService,
+        IRealtimeNotificationPublisher realtimeNotificationPublisher,
         IUnitOfWork unitOfWork)
     {
         _partRepository = partRepository;
         _userRepository = userRepository;
         _notificationLogRepository = notificationLogRepository;
         _emailService = emailService;
+        _realtimeNotificationPublisher = realtimeNotificationPublisher;
         _unitOfWork = unitOfWork;
     }
 
@@ -84,6 +87,13 @@ public sealed class NotificationService : INotificationService
                     }, cancellationToken);
                 }
 
+                await _realtimeNotificationPublisher.NotifyAdminsLowStockAsync(
+                    part.Id,
+                    part.Name,
+                    part.StockQuantity,
+                    LowStockThreshold,
+                    cancellationToken);
+
                 part.LowStockNotified = true;
                 part.UpdatedAt = DateTimeOffset.UtcNow;
                 _partRepository.Update(part);
@@ -102,5 +112,20 @@ public sealed class NotificationService : INotificationService
         {
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    public Task NotifySaleCreatedAsync(
+        Guid salesInvoiceId,
+        string invoiceNumber,
+        Guid customerId,
+        decimal totalAmount,
+        CancellationToken cancellationToken = default)
+    {
+        return _realtimeNotificationPublisher.NotifyStaffSaleCreatedAsync(
+            salesInvoiceId,
+            invoiceNumber,
+            customerId,
+            totalAmount,
+            cancellationToken);
     }
 }

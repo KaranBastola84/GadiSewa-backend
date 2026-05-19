@@ -301,6 +301,12 @@ public sealed class GadiSewaDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity
+                .HasOne(x => x.RequestedByCustomer)
+                .WithMany()
+                .HasForeignKey(x => x.RequestedByCustomerId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity
                 .HasOne(x => x.Part)
                 .WithMany(x => x.PartRequests)
                 .HasForeignKey(x => x.PartId)

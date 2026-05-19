@@ -7,7 +7,9 @@ public class PartRequest : BaseEntity
 {
     public string RequestNumber { get; set; } = string.Empty;
 
-    public Guid RequestedByStaffId { get; set; }
+    public Guid? RequestedByStaffId { get; set; }
+
+    public Guid? RequestedByCustomerId { get; set; }
 
     public Guid PartId { get; set; }
 
@@ -21,7 +23,9 @@ public class PartRequest : BaseEntity
 
     public string Notes { get; set; } = string.Empty;
 
-    public Staff RequestedByStaff { get; set; } = null!;
+    public Staff? RequestedByStaff { get; set; }
+
+    public Customer? RequestedByCustomer { get; set; }
 
     public Part Part { get; set; } = null!;
 

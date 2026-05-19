@@ -412,6 +412,95 @@ public sealed class StaffCustomersController : ControllerBase
         }
     }
 
+    [HttpGet("{id:guid}/full-profile")]
+    [Authorize(Policy = "BackOfficeOnly")]
+    public async Task<ActionResult<ApiResponse<CustomerFullProfileDto>>> GetCustomerFullProfile(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            IQueryable<Customer> query = _customerRepository.Query()
+                .AsNoTracking()
+                .Include(c => c.User)
+                .Include(c => c.Vehicles)
+                .Include(c => c.Appointments)
+                .Include(c => c.Reviews);
+
+            var customer = await query
+                .Where(c => c.Id == id)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (customer is null)
+            {
+                return NotFound(ApiResponse<CustomerFullProfileDto>.Failure(
+                    "Customer not found.",
+                    StatusCodes.Status404NotFound));
+            }
+
+            var invoices = await _salesInvoiceRepository.Query()
+                .AsNoTracking()
+                .Where(i => i.CustomerId == id)
+                .OrderByDescending(i => i.InvoiceDate)
+                .Take(10)
+                .ToListAsync(cancellationToken);
+
+            var appointments = await _appointmentRepository.Query()
+                .AsNoTracking()
+                .Where(a => a.CustomerId == id)
+                .Include(a => a.Vehicle)
+                .OrderByDescending(a => a.ScheduledAt)
+                .Take(10)
+                .ToListAsync(cancellationToken);
+
+            var dto = new CustomerFullProfileDto
+            {
+                CustomerInfo = new CustomerInfoDto
+                {
+                    Id = customer.Id,
+                    Name = $"{customer.User.FirstName} {customer.User.LastName}".Trim(),
+                    Email = customer.User.Email,
+                    Phone = customer.User.PhoneNumber,
+                    Address = customer.Address,
+                    LoyaltyPoints = customer.LoyaltyPoints,
+                    TotalSpent = customer.TotalSpent
+                },
+                Vehicles = customer.Vehicles
+                    .Select(VehicleDto.FromVehicle)
+                    .ToList(),
+                RecentInvoices = invoices
+                    .Select(i => new RecentInvoiceDto
+                    {
+                        Id = i.Id,
+                        InvoiceNumber = i.InvoiceNumber,
+                        InvoiceDate = i.InvoiceDate,
+                        TotalAmount = i.TotalAmount,
+                        Status = i.Status.ToString()
+                    })
+                    .ToList(),
+                RecentAppointments = appointments
+                    .Select(a => new RecentAppointmentDto
+                    {
+                        Id = a.Id,
+                        AppointmentNumber = a.AppointmentNumber,
+                        ScheduledAt = a.ScheduledAt,
+                        Status = a.Status.ToString(),
+                        VehicleRegistration = a.Vehicle.RegistrationNumber
+                    })
+                    .ToList()
+            };
+
+            return Ok(ApiResponse<CustomerFullProfileDto>.Success(dto));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                ApiResponse<CustomerFullProfileDto>.Failure(
+                    $"Error retrieving customer full profile: {ex.Message}",
+                    StatusCodes.Status500InternalServerError));
+        }
+    }
+
     /// <summary>
     /// Get customer history (appointments and invoices)
     /// </summary>
