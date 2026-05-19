@@ -36,7 +36,8 @@ public static class DependencyInjection
         services.AddScoped<IJwtTokenGenerator, JwtTokenGenerator>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<INotificationService, NotificationService>();
-        services.AddHostedService<OverdueInvoiceReminderHostedService>();
+        services.AddScoped<LowStockAlertJob>();
+        services.AddScoped<OverdueCreditReminderJob>();
 
         return services;
     }
