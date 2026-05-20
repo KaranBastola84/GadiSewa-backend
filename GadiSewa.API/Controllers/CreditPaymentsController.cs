@@ -5,6 +5,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 
 namespace GadiSewa.API.Controllers;
@@ -14,6 +15,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "BackOfficeOnly")]
 public sealed class CreditPaymentsController : ControllerBase
 {
+    private readonly ILogger<CreditPaymentsController> _logger;
     private readonly IRepository<CreditPayment> _creditPaymentRepository;
     private readonly IRepository<SalesInvoice> _salesInvoiceRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -21,11 +23,13 @@ public sealed class CreditPaymentsController : ControllerBase
     public CreditPaymentsController(
         IRepository<CreditPayment> creditPaymentRepository,
         IRepository<SalesInvoice> salesInvoiceRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<CreditPaymentsController> logger)
     {
         _creditPaymentRepository = creditPaymentRepository;
         _salesInvoiceRepository = salesInvoiceRepository;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     [HttpGet]

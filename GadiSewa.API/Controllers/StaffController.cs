@@ -8,6 +8,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "BackOfficeOnly")]
 public sealed class StaffController : ControllerBase
 {
+    private readonly ILogger<StaffController> _logger;
     private readonly IUserRepository _userRepository;
     private readonly IRepository<Staff> _staffRepository;
     private readonly IRepository<RefreshToken> _refreshTokenRepository;
@@ -32,7 +34,8 @@ public sealed class StaffController : ControllerBase
         IRepository<RefreshToken> refreshTokenRepository,
         IPasswordHasherService passwordHasherService,
         IEmailService emailService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<StaffController> logger)
     {
         _userRepository = userRepository;
         _staffRepository = staffRepository;
@@ -40,6 +43,7 @@ public sealed class StaffController : ControllerBase
         _passwordHasherService = passwordHasherService;
         _emailService = emailService;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     [HttpGet]

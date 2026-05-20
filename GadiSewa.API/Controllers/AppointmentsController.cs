@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using GadiSewa.Application.Common.Responses;
 using GadiSewa.Application.DTOs.Appointments;
 using GadiSewa.Application.Interfaces.Persistence;
@@ -19,6 +20,7 @@ public class AppointmentsController : ControllerBase
     private readonly IRepository<Vehicle> _vehicleRepository;
     private readonly IRepository<Staff> _staffRepository;
     private readonly IRepository<Customer> _customerRepository;
+    private readonly ILogger<AppointmentsController> _logger;
     private readonly IUnitOfWork _unitOfWork;
 
     public AppointmentsController(
@@ -26,13 +28,15 @@ public class AppointmentsController : ControllerBase
         IRepository<Vehicle> vehicleRepository,
         IRepository<Staff> staffRepository,
         IRepository<Customer> customerRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<AppointmentsController> logger)
     {
         _appointmentRepository = appointmentRepository;
         _vehicleRepository = vehicleRepository;
         _staffRepository = staffRepository;
         _customerRepository = customerRepository;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     private Guid GetCurrentUserId()
@@ -108,7 +112,8 @@ public class AppointmentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return ApiResponse<AppointmentDto>.Failure($"Error creating appointment: {ex.Message}", 500);
+            _logger.LogError(ex, "Error creating appointment");
+            return ApiResponse<AppointmentDto>.Failure("An unexpected error occurred while creating the appointment. Please try again.", 500);
         }
     }
 
@@ -176,7 +181,8 @@ public class AppointmentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return ApiResponse<IEnumerable<AppointmentDto>>.Failure($"Error retrieving appointments: {ex.Message}", 500);
+            _logger.LogError(ex, "Error retrieving appointments");
+            return ApiResponse<IEnumerable<AppointmentDto>>.Failure("An unexpected error occurred while loading appointments. Please try again.", 500);
         }
     }
 
@@ -208,7 +214,8 @@ public class AppointmentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return ApiResponse<AppointmentDto>.Failure($"Error retrieving appointment: {ex.Message}", 500);
+            _logger.LogError(ex, "Error retrieving appointment details");
+            return ApiResponse<AppointmentDto>.Failure("An unexpected error occurred while loading appointment details. Please try again.", 500);
         }
     }
 
@@ -248,7 +255,8 @@ public class AppointmentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return ApiResponse<AppointmentDto>.Failure($"Error retrieving appointment: {ex.Message}", 500);
+            _logger.LogError(ex, "Error retrieving customer appointment");
+            return ApiResponse<AppointmentDto>.Failure("An unexpected error occurred. Please try again.", 500);
         }
     }
 
@@ -320,7 +328,8 @@ public class AppointmentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return ApiResponse<AppointmentDto>.Failure($"Error updating appointment: {ex.Message}", 500);
+            _logger.LogError(ex, "Error updating appointment status");
+            return ApiResponse<AppointmentDto>.Failure("An unexpected error occurred while updating the appointment. Please try again.", 500);
         }
     }
 
@@ -373,7 +382,8 @@ public class AppointmentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return ApiResponse<string>.Failure($"Error cancelling appointment: {ex.Message}", 500);
+            _logger.LogError(ex, "Error cancelling appointment");
+            return ApiResponse<string>.Failure("An unexpected error occurred while cancelling the appointment. Please try again.", 500);
         }
     }
 
@@ -412,7 +422,8 @@ public class AppointmentsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return ApiResponse<IEnumerable<AppointmentDto>>.Failure($"Error retrieving customer appointments: {ex.Message}", 500);
+            _logger.LogError(ex, "Error retrieving customer appointments");
+            return ApiResponse<IEnumerable<AppointmentDto>>.Failure("An unexpected error occurred while loading customer appointments. Please try again.", 500);
         }
     }
 

@@ -5,6 +5,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -15,6 +16,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize]
 public sealed class PartRequestsController : ControllerBase
 {
+    private readonly ILogger<PartRequestsController> _logger;
     private readonly IRepository<PartRequest> _partRequestRepository;
     private readonly IRepository<Part> _partRepository;
     private readonly IRepository<Vendor> _vendorRepository;
@@ -28,7 +30,8 @@ public sealed class PartRequestsController : ControllerBase
         IRepository<Vendor> vendorRepository,
         IRepository<Staff> staffRepository,
         IRepository<Customer> customerRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<PartRequestsController> logger)
     {
         _partRequestRepository = partRequestRepository;
         _partRepository = partRepository;
@@ -36,6 +39,7 @@ public sealed class PartRequestsController : ControllerBase
         _staffRepository = staffRepository;
         _customerRepository = customerRepository;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     private Guid GetCurrentUserId()
@@ -89,7 +93,8 @@ public sealed class PartRequestsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<IReadOnlyList<PartRequestDto>>.Failure($"Error retrieving part requests: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in PartRequestsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<IReadOnlyList<PartRequestDto>>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -132,7 +137,8 @@ public sealed class PartRequestsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure($"Error retrieving part request: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in PartRequestsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -197,7 +203,8 @@ public sealed class PartRequestsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure($"Error creating part request: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in PartRequestsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -275,7 +282,8 @@ public sealed class PartRequestsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure($"Error creating part request: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in PartRequestsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -337,7 +345,8 @@ public sealed class PartRequestsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure($"Error updating part request: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in PartRequestsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -395,7 +404,8 @@ public sealed class PartRequestsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure($"Error updating part request status: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in PartRequestsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<PartRequestDto>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -418,7 +428,8 @@ public sealed class PartRequestsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<object?>.Failure($"Error deleting part request: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in PartRequestsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<object?>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 

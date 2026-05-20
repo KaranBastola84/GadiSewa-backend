@@ -6,6 +6,7 @@ using GadiSewa.Application.Interfaces.Services;
 using GadiSewa.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -16,6 +17,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize]
 public sealed class PurchaseInvoicesController : ControllerBase
 {
+    private readonly ILogger<PurchaseInvoicesController> _logger;
     private readonly IRepository<PurchaseInvoice> _purchaseInvoiceRepository;
     private readonly IRepository<PurchaseInvoiceItem> _purchaseInvoiceItemRepository;
     private readonly IRepository<Part> _partRepository;
@@ -31,7 +33,8 @@ public sealed class PurchaseInvoicesController : ControllerBase
         IRepository<Vendor> vendorRepository,
         IRepository<Staff> staffRepository,
         INotificationService notificationService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<PurchaseInvoicesController> logger)
     {
         _purchaseInvoiceRepository = purchaseInvoiceRepository;
         _purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
@@ -40,6 +43,7 @@ public sealed class PurchaseInvoicesController : ControllerBase
         _staffRepository = staffRepository;
         _notificationService = notificationService;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     [HttpGet]

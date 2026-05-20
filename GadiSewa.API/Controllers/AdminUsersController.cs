@@ -7,6 +7,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Swashbuckle.AspNetCore.Annotations;
 using System.Security.Claims;
 
@@ -17,6 +18,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "AdminOnly")]
 public sealed class AdminUsersController : ControllerBase
 {
+    private readonly ILogger<AdminUsersController> _logger;
     private const string BootstrapKeyHeaderName = "X-Admin-Bootstrap-Key";
 
     private readonly IConfiguration _configuration;
@@ -34,7 +36,8 @@ public sealed class AdminUsersController : ControllerBase
         IPasswordHasherService passwordHasherService,
         IEmailService emailService,
         IUnitOfWork unitOfWork,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<AdminUsersController> logger)
     {
         _configuration = configuration;
         _userRepository = userRepository;
@@ -43,6 +46,7 @@ public sealed class AdminUsersController : ControllerBase
         _passwordHasherService = passwordHasherService;
         _emailService = emailService;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     [AllowAnonymous]

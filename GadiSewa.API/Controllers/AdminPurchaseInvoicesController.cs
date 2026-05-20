@@ -7,6 +7,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using GadiSewa.API.Extensions;
 using System.Security.Claims;
@@ -18,6 +19,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "AdminOnly")]
 public sealed class AdminPurchaseInvoicesController : ControllerBase
 {
+    private readonly ILogger<AdminPurchaseInvoicesController> _logger;
     private readonly IRepository<PurchaseInvoice> _purchaseInvoiceRepository;
     private readonly IRepository<PurchaseInvoiceItem> _purchaseInvoiceItemRepository;
     private readonly IRepository<Part> _partRepository;
@@ -33,7 +35,8 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         IRepository<Vendor> vendorRepository,
         IRepository<Staff> staffRepository,
         INotificationService notificationService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<AdminPurchaseInvoicesController> logger)
     {
         _purchaseInvoiceRepository = purchaseInvoiceRepository;
         _purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
@@ -42,6 +45,7 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         _staffRepository = staffRepository;
         _notificationService = notificationService;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
 
@@ -98,9 +102,10 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in AdminPurchaseInvoicesController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<IReadOnlyList<PurchaseInvoiceDto>>.Failure(
-                    $"Error retrieving purchase invoices: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -141,9 +146,10 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in AdminPurchaseInvoicesController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<PurchaseInvoiceDto>.Failure(
-                    $"Error retrieving purchase invoice: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -258,9 +264,10 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in AdminPurchaseInvoicesController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<PurchaseInvoiceDto>.Failure(
-                    $"Error creating purchase invoice: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -340,9 +347,10 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in AdminPurchaseInvoicesController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<PurchaseInvoiceDto>.Failure(
-                    $"Error updating purchase invoice: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -432,9 +440,10 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in AdminPurchaseInvoicesController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<PurchaseInvoiceDto>.Failure(
-                    $"Error receiving stock: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -488,9 +497,10 @@ public sealed class AdminPurchaseInvoicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in AdminPurchaseInvoicesController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<object>.Failure(
-                    $"Error deleting purchase invoice: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }

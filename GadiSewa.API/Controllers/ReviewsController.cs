@@ -5,6 +5,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -15,6 +16,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize]
 public sealed class ReviewsController : ControllerBase
 {
+    private readonly ILogger<ReviewsController> _logger;
     private readonly IRepository<Review> _reviewRepository;
     private readonly IRepository<Appointment> _appointmentRepository;
     private readonly IRepository<Customer> _customerRepository;
@@ -24,12 +26,14 @@ public sealed class ReviewsController : ControllerBase
         IRepository<Review> reviewRepository,
         IRepository<Appointment> appointmentRepository,
         IRepository<Customer> customerRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<ReviewsController> logger)
     {
         _reviewRepository = reviewRepository;
         _appointmentRepository = appointmentRepository;
         _customerRepository = customerRepository;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     private Guid GetCurrentUserId()
@@ -77,7 +81,8 @@ public sealed class ReviewsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<IReadOnlyList<ReviewDto>>.Failure($"Error retrieving reviews: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in ReviewsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<IReadOnlyList<ReviewDto>>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -113,7 +118,8 @@ public sealed class ReviewsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<ReviewDto>.Failure($"Error retrieving review: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in ReviewsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<ReviewDto>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -149,7 +155,8 @@ public sealed class ReviewsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<ReviewDto?>.Failure($"Error retrieving review: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in ReviewsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<ReviewDto?>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -218,7 +225,8 @@ public sealed class ReviewsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<ReviewDto>.Failure($"Error creating review: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in ReviewsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<ReviewDto>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -263,7 +271,8 @@ public sealed class ReviewsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<ReviewDto>.Failure($"Error updating review: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in ReviewsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<ReviewDto>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 
@@ -292,7 +301,8 @@ public sealed class ReviewsController : ControllerBase
         }
         catch (Exception ex)
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<object?>.Failure($"Error deleting review: {ex.Message}", StatusCodes.Status500InternalServerError));
+            _logger.LogError(ex, "Unhandled error in ReviewsController");
+            return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<object?>.Failure("An unexpected error occurred. Please try again.", StatusCodes.Status500InternalServerError));
         }
     }
 }

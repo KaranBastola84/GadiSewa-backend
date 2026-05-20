@@ -6,6 +6,7 @@ using GadiSewa.Application.Interfaces.Services;
 using GadiSewa.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace GadiSewa.API.Controllers;
 
@@ -14,6 +15,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "AdminOnly")]
 public sealed class AdminPartsController : ControllerBase
 {
+    private readonly ILogger<AdminPartsController> _logger;
     private readonly IRepository<Part> _partRepository;
     private readonly IRepository<PurchaseInvoiceItem> _purchaseInvoiceItemRepository;
     private readonly IRepository<SalesInvoiceItem> _salesInvoiceItemRepository;
@@ -25,13 +27,15 @@ public sealed class AdminPartsController : ControllerBase
         IRepository<PurchaseInvoiceItem> purchaseInvoiceItemRepository,
         IRepository<SalesInvoiceItem> salesInvoiceItemRepository,
         INotificationService notificationService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<AdminPartsController> logger)
     {
         _partRepository = partRepository;
         _purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
         _salesInvoiceItemRepository = salesInvoiceItemRepository;
         _notificationService = notificationService;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     [HttpGet]

@@ -1,4 +1,4 @@
-﻿using GadiSewa.Application.Common.Exceptions;
+using GadiSewa.Application.Common.Exceptions;
 using GadiSewa.Application.Common.Responses;
 using GadiSewa.Application.DTOs.SalesInvoices;
 using GadiSewa.Application.Interfaces.Persistence;
@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Net;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using GadiSewa.API.Extensions;
 
@@ -29,6 +30,7 @@ public sealed class SalesInvoicesController : ControllerBase
     private readonly IEmailService _emailService;
     private readonly INotificationService _notificationService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<SalesInvoicesController> _logger;
 
     public SalesInvoicesController(
         IRepository<SalesInvoice> salesInvoiceRepository,
@@ -40,7 +42,8 @@ public sealed class SalesInvoicesController : ControllerBase
         IRepository<Staff> staffRepository,
         IEmailService emailService,
         INotificationService notificationService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<SalesInvoicesController> logger)
     {
         _salesInvoiceRepository = salesInvoiceRepository;
         _salesInvoiceItemRepository = salesInvoiceItemRepository;
@@ -52,6 +55,7 @@ public sealed class SalesInvoicesController : ControllerBase
         _emailService = emailService;
         _notificationService = notificationService;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
 
@@ -128,9 +132,10 @@ public sealed class SalesInvoicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error retrieving sales invoices");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<IReadOnlyList<SalesInvoiceDto>>.Failure(
-                    $"Error retrieving sales invoices: {ex.Message}",
+                    "An unexpected error occurred while loading sales invoices. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -190,9 +195,10 @@ public sealed class SalesInvoicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error retrieving sales invoice");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<SalesInvoiceDto>.Failure(
-                    $"Error retrieving sales invoice: {ex.Message}",
+                    "An unexpected error occurred while loading the invoice. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -244,8 +250,9 @@ public sealed class SalesInvoicesController : ControllerBase
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Error sending invoice email");
                 return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<string>.Failure(
-                    $"Error sending invoice email: {ex.Message}",
+                    "An unexpected error occurred while sending the invoice email. Please try again.",
                     StatusCodes.Status500InternalServerError));
             }
 
@@ -253,8 +260,9 @@ public sealed class SalesInvoicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error in send invoice email operation");
             return StatusCode(StatusCodes.Status500InternalServerError, ApiResponse<string>.Failure(
-                $"Error sending invoice email: {ex.Message}",
+                "An unexpected error occurred. Please try again.",
                 StatusCodes.Status500InternalServerError));
         }
     }
@@ -418,9 +426,10 @@ public sealed class SalesInvoicesController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Error creating sales invoice");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<SalesInvoiceDto>.Failure(
-                    $"Error creating sales invoice: {ex.Message}",
+                    "An unexpected error occurred while creating the invoice. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }

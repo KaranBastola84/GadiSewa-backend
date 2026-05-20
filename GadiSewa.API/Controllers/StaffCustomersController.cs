@@ -8,6 +8,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 
 namespace GadiSewa.API.Controllers;
@@ -17,6 +18,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "BackOfficeOnly")]
 public sealed class StaffCustomersController : ControllerBase
 {
+    private readonly ILogger<StaffCustomersController> _logger;
     private readonly IUserRepository _userRepository;
     private readonly IRepository<Customer> _customerRepository;
     private readonly IRepository<Vehicle> _vehicleRepository;
@@ -36,7 +38,8 @@ public sealed class StaffCustomersController : ControllerBase
         IRepository<CreditPayment> creditPaymentRepository,
         IPasswordHasherService passwordHasherService,
         IEmailService emailService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<StaffCustomersController> logger)
     {
         _userRepository = userRepository;
         _customerRepository = customerRepository;
@@ -47,6 +50,7 @@ public sealed class StaffCustomersController : ControllerBase
         _passwordHasherService = passwordHasherService;
         _emailService = emailService;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     [HttpPost]
@@ -209,9 +213,10 @@ public sealed class StaffCustomersController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in StaffCustomersController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Failure(
-                    $"Error searching customers: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -273,9 +278,10 @@ public sealed class StaffCustomersController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in StaffCustomersController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<CustomerSearchResultDto>.Failure(
-                    $"Error retrieving customer: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -339,9 +345,10 @@ public sealed class StaffCustomersController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in StaffCustomersController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Failure(
-                    $"Error searching by vehicle: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -405,9 +412,10 @@ public sealed class StaffCustomersController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in StaffCustomersController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<IReadOnlyList<CustomerSearchResultDto>>.Failure(
-                    $"Error searching by phone: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -494,9 +502,10 @@ public sealed class StaffCustomersController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in StaffCustomersController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<CustomerFullProfileDto>.Failure(
-                    $"Error retrieving customer full profile: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -618,9 +627,10 @@ public sealed class StaffCustomersController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in StaffCustomersController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<CustomerHistorySummaryDto>.Failure(
-                    $"Error retrieving customer history: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
