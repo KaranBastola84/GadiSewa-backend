@@ -14,6 +14,9 @@ namespace GadiSewa.API.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
+/// <summary>
+/// Controller for managing vehicle service appointments
+/// </summary>
 public class AppointmentsController : ControllerBase
 {
     private readonly IRepository<Appointment> _appointmentRepository;
