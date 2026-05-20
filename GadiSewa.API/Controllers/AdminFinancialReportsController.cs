@@ -4,6 +4,7 @@ using GadiSewa.Application.Interfaces.Persistence;
 using GadiSewa.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 
 namespace GadiSewa.API.Controllers;
@@ -13,6 +14,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "AdminOnly")]
 public sealed class AdminFinancialReportsController : ControllerBase
 {
+    private readonly ILogger<AdminFinancialReportsController> _logger;
     private readonly IRepository<SalesInvoice> _salesInvoiceRepository;
     private readonly IRepository<PurchaseInvoice> _purchaseInvoiceRepository;
     private readonly IRepository<SalesInvoiceItem> _salesInvoiceItemRepository;
@@ -22,12 +24,14 @@ public sealed class AdminFinancialReportsController : ControllerBase
         IRepository<SalesInvoice> salesInvoiceRepository,
         IRepository<PurchaseInvoice> purchaseInvoiceRepository,
         IRepository<SalesInvoiceItem> salesInvoiceItemRepository,
-        IRepository<PurchaseInvoiceItem> purchaseInvoiceItemRepository)
+        IRepository<PurchaseInvoiceItem> purchaseInvoiceItemRepository,
+        ILogger<AdminFinancialReportsController> logger)
     {
         _salesInvoiceRepository = salesInvoiceRepository;
         _purchaseInvoiceRepository = purchaseInvoiceRepository;
         _salesInvoiceItemRepository = salesInvoiceItemRepository;
         _purchaseInvoiceItemRepository = purchaseInvoiceItemRepository;
+        _logger = logger;
     }
 
     /// <summary>
@@ -117,9 +121,10 @@ public sealed class AdminFinancialReportsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in AdminFinancialReportsController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<FinancialReportDto>.Failure(
-                    $"Error generating daily report: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -212,9 +217,10 @@ public sealed class AdminFinancialReportsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in AdminFinancialReportsController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<FinancialReportDto>.Failure(
-                    $"Error generating monthly report: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -307,9 +313,10 @@ public sealed class AdminFinancialReportsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in AdminFinancialReportsController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<FinancialReportDto>.Failure(
-                    $"Error generating yearly report: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
