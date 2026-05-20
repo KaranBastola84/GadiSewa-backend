@@ -4,6 +4,7 @@ using GadiSewa.Application.DTOs.Auth;
 using GadiSewa.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Security.Claims;
 
@@ -13,11 +14,14 @@ namespace GadiSewa.API.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
+    private readonly ILogger<AuthController> _logger;
     private readonly IAuthService _authService;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService,
+        ILogger<AuthController> logger)
     {
         _authService = authService;
+        _logger = logger;
     }
 
     [AllowAnonymous]

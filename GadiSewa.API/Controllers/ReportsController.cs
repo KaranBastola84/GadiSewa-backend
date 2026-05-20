@@ -5,6 +5,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 
 namespace GadiSewa.API.Controllers;
@@ -14,6 +15,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "BackOfficeOnly")]
 public sealed class ReportsController : ControllerBase
 {
+    private readonly ILogger<ReportsController> _logger;
     private readonly IRepository<SalesInvoice> _salesInvoiceRepository;
     private readonly IRepository<Part> _partRepository;
     private readonly IRepository<Customer> _customerRepository;
@@ -23,12 +25,14 @@ public sealed class ReportsController : ControllerBase
         IRepository<SalesInvoice> salesInvoiceRepository,
         IRepository<Part> partRepository,
         IRepository<Customer> customerRepository,
-        IRepository<Vehicle> vehicleRepository)
+        IRepository<Vehicle> vehicleRepository,
+        ILogger<ReportsController> logger)
     {
         _salesInvoiceRepository = salesInvoiceRepository;
         _partRepository = partRepository;
         _customerRepository = customerRepository;
         _vehicleRepository = vehicleRepository;
+        _logger = logger;
     }
 
     /// <summary>
@@ -92,10 +96,11 @@ public sealed class ReportsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in ReportsController");
             return StatusCode(
                 StatusCodes.Status500InternalServerError,
                 ApiResponse<FinancialSummaryDto>.Failure(
-                    $"Error retrieving financial report: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -129,10 +134,11 @@ public sealed class ReportsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in ReportsController");
             return StatusCode(
                 StatusCodes.Status500InternalServerError,
                 ApiResponse<IReadOnlyList<InventoryReportDto>>.Failure(
-                    $"Error retrieving inventory report: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -183,10 +189,11 @@ public sealed class ReportsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in ReportsController");
             return StatusCode(
                 StatusCodes.Status500InternalServerError,
                 ApiResponse<IReadOnlyList<TopSpenderDto>>.Failure(
-                    $"Error retrieving top spenders: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -246,10 +253,11 @@ public sealed class ReportsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in ReportsController");
             return StatusCode(
                 StatusCodes.Status500InternalServerError,
                 ApiResponse<IReadOnlyList<RegularCustomerDto>>.Failure(
-                    $"Error retrieving regular customers: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -299,10 +307,11 @@ public sealed class ReportsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in ReportsController");
             return StatusCode(
                 StatusCodes.Status500InternalServerError,
                 ApiResponse<IReadOnlyList<PendingCreditDto>>.Failure(
-                    $"Error retrieving pending credits: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }
@@ -340,10 +349,11 @@ public sealed class ReportsController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in ReportsController");
             return StatusCode(
                 StatusCodes.Status500InternalServerError,
                 ApiResponse<IReadOnlyList<LowStockPartDto>>.Failure(
-                    $"Error retrieving low stock parts: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }

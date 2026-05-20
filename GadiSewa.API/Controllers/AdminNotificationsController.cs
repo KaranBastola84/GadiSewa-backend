@@ -4,6 +4,7 @@ using GadiSewa.Application.Interfaces.Persistence;
 using GadiSewa.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 
 namespace GadiSewa.API.Controllers;
@@ -13,11 +14,14 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "AdminOnly")]
 public sealed class AdminNotificationsController : ControllerBase
 {
+    private readonly ILogger<AdminNotificationsController> _logger;
     private readonly IRepository<NotificationLog> _notificationLogRepository;
 
-    public AdminNotificationsController(IRepository<NotificationLog> notificationLogRepository)
+    public AdminNotificationsController(IRepository<NotificationLog> notificationLogRepository,
+        ILogger<AdminNotificationsController> logger)
     {
         _notificationLogRepository = notificationLogRepository;
+        _logger = logger;
     }
 
     [HttpGet]

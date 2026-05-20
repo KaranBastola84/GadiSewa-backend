@@ -8,6 +8,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -18,6 +19,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize]
 public sealed class CustomersController : ControllerBase
 {
+    private readonly ILogger<CustomersController> _logger;
     private readonly IUserRepository _userRepository;
     private readonly IRepository<Customer> _customerRepository;
     private readonly IRepository<Vehicle> _vehicleRepository;
@@ -37,7 +39,8 @@ public sealed class CustomersController : ControllerBase
         IRepository<Appointment> appointmentRepository,
         IPasswordHasherService passwordHasherService,
         IEmailService emailService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<CustomersController> logger)
     {
         _userRepository = userRepository;
         _customerRepository = customerRepository;
@@ -48,6 +51,7 @@ public sealed class CustomersController : ControllerBase
         _passwordHasherService = passwordHasherService;
         _emailService = emailService;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     private Guid GetCurrentUserId()

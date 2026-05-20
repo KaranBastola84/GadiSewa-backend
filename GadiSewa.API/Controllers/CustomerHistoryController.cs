@@ -5,6 +5,7 @@ using GadiSewa.Domain.Entities;
 using GadiSewa.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -15,6 +16,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "CustomerOnly")]
 public sealed class CustomerHistoryController : ControllerBase
 {
+    private readonly ILogger<CustomerHistoryController> _logger;
     private readonly IRepository<Customer> _customerRepository;
     private readonly IRepository<Appointment> _appointmentRepository;
     private readonly IRepository<SalesInvoice> _salesInvoiceRepository;
@@ -24,12 +26,14 @@ public sealed class CustomerHistoryController : ControllerBase
         IRepository<Customer> customerRepository,
         IRepository<Appointment> appointmentRepository,
         IRepository<SalesInvoice> salesInvoiceRepository,
-        IRepository<CreditPayment> creditPaymentRepository)
+        IRepository<CreditPayment> creditPaymentRepository,
+        ILogger<CustomerHistoryController> logger)
     {
         _customerRepository = customerRepository;
         _appointmentRepository = appointmentRepository;
         _salesInvoiceRepository = salesInvoiceRepository;
         _creditPaymentRepository = creditPaymentRepository;
+        _logger = logger;
     }
 
     private Guid GetCurrentUserId()
@@ -161,9 +165,10 @@ public sealed class CustomerHistoryController : ControllerBase
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Unhandled error in CustomerHistoryController");
             return StatusCode(StatusCodes.Status500InternalServerError,
                 ApiResponse<CustomerHistorySummaryDto>.Failure(
-                    $"Error retrieving history: {ex.Message}",
+                    "An unexpected error occurred. Please try again.",
                     StatusCodes.Status500InternalServerError));
         }
     }

@@ -4,6 +4,7 @@ using GadiSewa.Application.Interfaces.Persistence;
 using GadiSewa.Domain.Entities;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 
 namespace GadiSewa.API.Controllers;
 
@@ -12,6 +13,7 @@ namespace GadiSewa.API.Controllers;
 [Authorize(Policy = "BackOfficeOnly")]
 public sealed class AdminVendorsController : ControllerBase
 {
+    private readonly ILogger<AdminVendorsController> _logger;
     private readonly IRepository<Vendor> _vendorRepository;
     private readonly IRepository<PurchaseInvoice> _purchaseInvoiceRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -19,11 +21,13 @@ public sealed class AdminVendorsController : ControllerBase
     public AdminVendorsController(
         IRepository<Vendor> vendorRepository,
         IRepository<PurchaseInvoice> purchaseInvoiceRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ILogger<AdminVendorsController> logger)
     {
         _vendorRepository = vendorRepository;
         _purchaseInvoiceRepository = purchaseInvoiceRepository;
         _unitOfWork = unitOfWork;
+        _logger = logger;
     }
 
     [HttpGet]
