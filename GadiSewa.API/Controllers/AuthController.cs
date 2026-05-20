@@ -12,6 +12,9 @@ namespace GadiSewa.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+/// <summary>
+/// Handles all authentication and user registration logic
+/// </summary>
 public class AuthController : ControllerBase
 {
     private readonly ILogger<AuthController> _logger;
