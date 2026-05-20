@@ -16,6 +16,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 
+// entry point for gadisewaapi
 var builder = WebApplication.CreateBuilder(args);
 
 var corsPolicyName = "CorsPolicy";
